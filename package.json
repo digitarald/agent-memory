@@ -1,0 +1,282 @@
+{
+	"name": "agent-memory",
+	"publisher": "digitarald",
+	"displayName": "Agent Memory",
+	"description": "Memory tool implementation for VS Code. Store and retrieve context across conversations.",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Microsoft/vscode-extension-samples"
+	},
+	"version": "0.1.0",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.100.0"
+	},
+	"categories": [
+		"AI",
+		"Chat"
+	],
+	"activationEvents": [],
+	"contributes": {
+		"languageModelTools": [
+			{
+				"name": "agent-memory_memory",
+				"tags": [
+					"memory",
+					"context",
+					"agent-memory"
+				],
+				"toolReferenceName": "memory",
+				"displayName": "Memory",
+				"modelDescription": "Store and retrieve information across conversations through a memory file directory. Supports creating, reading, updating, and deleting files in /memories directory.",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(database)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"command": {
+							"type": "string",
+							"enum": [
+								"view",
+								"create",
+								"str_replace",
+								"insert",
+								"delete",
+								"rename"
+							],
+							"description": "The memory operation to perform"
+						},
+						"path": {
+							"type": "string",
+							"description": "Path to the file or directory (for view, create, str_replace, insert, delete commands)"
+						},
+						"view_range": {
+							"type": "array",
+							"items": {
+								"type": "number"
+							},
+							"minItems": 2,
+							"maxItems": 2,
+							"description": "Optional: [start_line, end_line] for viewing specific lines"
+						},
+						"file_text": {
+							"type": "string",
+							"description": "File content (for create command)"
+						},
+						"old_str": {
+							"type": "string",
+							"description": "Text to replace (for str_replace command)"
+						},
+						"new_str": {
+							"type": "string",
+							"description": "Replacement text (for str_replace command)"
+						},
+						"insert_line": {
+							"type": "number",
+							"description": "Line number to insert at (for insert command)"
+						},
+						"insert_text": {
+							"type": "string",
+							"description": "Text to insert (for insert command)"
+						},
+						"old_path": {
+							"type": "string",
+							"description": "Current path (for rename command)"
+						},
+						"new_path": {
+							"type": "string",
+							"description": "New path (for rename command)"
+						}
+					},
+					"required": [
+						"command"
+					],
+					"allOf": [
+						{
+							"if": {
+								"properties": {
+									"command": {
+										"const": "view"
+									}
+								}
+							},
+							"then": {
+								"required": [
+									"path"
+								]
+							}
+						},
+						{
+							"if": {
+								"properties": {
+									"command": {
+										"const": "create"
+									}
+								}
+							},
+							"then": {
+								"required": [
+									"path",
+									"file_text"
+								]
+							}
+						},
+						{
+							"if": {
+								"properties": {
+									"command": {
+										"const": "str_replace"
+									}
+								}
+							},
+							"then": {
+								"required": [
+									"path",
+									"old_str",
+									"new_str"
+								]
+							}
+						},
+						{
+							"if": {
+								"properties": {
+									"command": {
+										"const": "insert"
+									}
+								}
+							},
+							"then": {
+								"required": [
+									"path",
+									"insert_line",
+									"insert_text"
+								]
+							}
+						},
+						{
+							"if": {
+								"properties": {
+									"command": {
+										"const": "delete"
+									}
+								}
+							},
+							"then": {
+								"required": [
+									"path"
+								]
+							}
+						},
+						{
+							"if": {
+								"properties": {
+									"command": {
+										"const": "rename"
+									}
+								}
+							},
+							"then": {
+								"required": [
+									"old_path",
+									"new_path"
+								]
+							}
+						}
+					]
+				}
+			}
+		],
+		"configuration": {
+			"title": "Agent Memory",
+			"properties": {
+				"agentMemory.storageBackend": {
+					"type": "string",
+					"enum": [
+						"memory",
+						"disk"
+					],
+					"enumDescriptions": [
+						"Store memory files in-memory (per workspace, ephemeral)",
+						"Store memory files in .vscode/memory directory (persistent)"
+					],
+					"default": "memory",
+					"description": "Storage backend for memory files"
+				}
+			}
+		},
+		"views": {
+			"explorer": [
+				{
+					"id": "agentMemory.files",
+					"name": "Agent Memory Files",
+					"icon": "$(database)",
+					"contextualTitle": "Agent Memory"
+				},
+				{
+					"id": "agentMemory.activityLog",
+					"name": "Memory Activity Log",
+					"icon": "$(list-ordered)",
+					"contextualTitle": "Agent Memory"
+				}
+			]
+		},
+		"commands": [
+			{
+				"command": "agentMemory.refresh",
+				"title": "Refresh Memory Files",
+				"category": "Agent Memory",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "agentMemory.clearLogs",
+				"title": "Clear Activity Logs",
+				"category": "Agent Memory",
+				"icon": "$(clear-all)"
+			},
+			{
+				"command": "agentMemory.openMemoryFile",
+				"title": "Open Memory File",
+				"category": "Agent Memory"
+			}
+		],
+		"menus": {
+			"view/title": [
+				{
+					"command": "agentMemory.refresh",
+					"when": "view == agentMemory.files",
+					"group": "navigation"
+				},
+				{
+					"command": "agentMemory.clearLogs",
+					"when": "view == agentMemory.activityLog",
+					"group": "navigation"
+				}
+			]
+		}
+	},
+	"main": "./out/extension.js",
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"lint": "eslint",
+		"watch": "tsc -watch -p ./",
+		"test": "jest",
+		"test:watch": "jest --watch",
+		"test:coverage": "jest --coverage",
+		"package": "vsce package",
+		"publish": "vsce publish"
+	},
+	"devDependencies": {
+		"@eslint/js": "^9.13.0",
+		"@stylistic/eslint-plugin": "^2.9.0",
+		"@types/jest": "^30.0.0",
+		"@types/node": "^22",
+		"@types/vscode": "^1.100.0",
+		"@vscode/vsce": "^3.6.2",
+		"eslint": "^9.13.0",
+		"jest": "^30.2.0",
+		"ts-jest": "^29.4.4",
+		"typescript": "^5.9.2",
+		"typescript-eslint": "^8.39.0"
+	}
+}

@@ -1,0 +1,18 @@
+{
+    "search.exclude": {
+        "out": true
+    },
+    "git.branchProtection": [
+        "main"
+    ],
+    "files.trimTrailingWhitespace": true,
+    "jest.jestCommandLine": "npm test",
+    "jest.runMode": "on-demand",
+    "jest.rootPath": "./",
+    "jest.coverageColors": {
+        "covered": "rgba(9, 156, 65, 0.4)",
+        "uncovered": "rgba(121, 31, 10, 0.4)",
+        "partially": "rgba(235, 198, 52, 0.4)"
+    },
+    "typescript.preferences.useAliasesForRenames": false
+}

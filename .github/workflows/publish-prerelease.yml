@@ -1,0 +1,66 @@
+name: Publish Pre-release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  build-test:
+    uses: ./.github/workflows/build-test.yml
+
+  publish-prerelease:
+    needs: build-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for version calculation
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile extension
+        run: npm run compile
+
+      - name: Generate pre-release version
+        id: version
+        run: |
+          # Get current version from package.json
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          # Get commit count since last tag (or total if no tags)
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          # Get short commit SHA
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          # Create pre-release version: x.y.z-pre.COMMIT_COUNT+SHORT_SHA
+          PRE_VERSION="${CURRENT_VERSION}-pre.${COMMIT_COUNT}+${SHORT_SHA}"
+          echo "version=${PRE_VERSION}" >> $GITHUB_OUTPUT
+          echo "Pre-release version: ${PRE_VERSION}"
+
+      - name: Update package.json version
+        run: |
+          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+
+      - name: Package pre-release extension
+        run: npx @vscode/vsce package --pre-release
+
+      - name: Publish pre-release to VS Code Marketplace
+        run: npx @vscode/vsce publish --pre-release -p ${{ secrets.VSCE_PAT }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prerelease-vsix-${{ steps.version.outputs.version }}
+          path: '*.vsix'
+          retention-days: 14
