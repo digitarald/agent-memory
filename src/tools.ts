@@ -6,7 +6,7 @@ import { MemoryActivityLogger } from './activityLogger.js';
 /**
  * Gets the configured storage backend for a workspace
  */
-function getStorageBackend(workspaceFolder: vscode.WorkspaceFolder): 'memory' | 'disk' {
+function getStorageBackend(_workspaceFolder: vscode.WorkspaceFolder): 'memory' | 'disk' {
 	const config = vscode.workspace.getConfiguration('agentMemory');
 	return config.get<'memory' | 'disk'>('storageBackend', 'memory');
 }
@@ -105,13 +105,14 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				result = `Renamed successfully: ${cleanPath(params.old_path)} → ${cleanPath(params.new_path)}`;
 				this.activityLogger.log('rename', params.old_path, true, `New path: ${params.new_path}`);
 				break;
-			}				default: {
-					const errorMsg = `Unknown command: ${(params as any).command}`;
-					this.activityLogger.log('unknown', '', false, errorMsg);
-					return new vscode.LanguageModelToolResult([
-						new vscode.LanguageModelTextPart(errorMsg)
-					]);
-				}
+			}
+		default: {
+			const errorMsg = `Unknown command: ${String((params as { command?: string }).command)}`;
+			this.activityLogger.log('unknown', '', false, errorMsg);
+			return new vscode.LanguageModelToolResult([
+				new vscode.LanguageModelTextPart(errorMsg)
+			]);
+		}
 			}
 
 			return new vscode.LanguageModelToolResult([
@@ -211,6 +212,45 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 	 */
 	clearStorageCache(): void {
 		this.storageMap.clear();
+	}
+
+	/**
+	 * Clear all memory files in the current workspace
+	 */
+	async clearAllMemoryFiles(): Promise<void> {
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		if (!workspaceFolders || workspaceFolders.length === 0) {
+			throw new Error('No workspace folder is open');
+		}
+
+		const storage = this.getStorage(workspaceFolders[0]);
+		const files = await storage.listFiles();
+
+		// Delete all files (not directories)
+		for (const file of files) {
+			if (!file.isDirectory) {
+				try {
+					await storage.delete(file.path);
+					this.activityLogger.log('delete', file.path, true, 'Cleared via Clear All');
+				} catch (error) {
+					this.activityLogger.log('delete', file.path, false, error instanceof Error ? error.message : String(error));
+				}
+			}
+		}
+	}
+
+	/**
+	 * Delete a specific memory file
+	 */
+	async deleteMemoryFile(filePath: string): Promise<void> {
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		if (!workspaceFolders || workspaceFolders.length === 0) {
+			throw new Error('No workspace folder is open');
+		}
+
+		const storage = this.getStorage(workspaceFolders[0]);
+		await storage.delete(filePath);
+		this.activityLogger.log('delete', filePath, true);
 	}
 }
 

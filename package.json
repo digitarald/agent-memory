@@ -234,6 +234,18 @@
 				"icon": "$(clear-all)"
 			},
 			{
+				"command": "agentMemory.clearAllMemoryFiles",
+				"title": "Clear All Memory Files",
+				"category": "Agent Memory",
+				"icon": "$(trash)"
+			},
+			{
+				"command": "agentMemory.deleteMemoryFile",
+				"title": "Delete Memory File",
+				"category": "Agent Memory",
+				"icon": "$(trash)"
+			},
+			{
 				"command": "agentMemory.openMemoryFile",
 				"title": "Open Memory File",
 				"category": "Agent Memory"
@@ -247,9 +259,21 @@
 					"group": "navigation"
 				},
 				{
+					"command": "agentMemory.clearAllMemoryFiles",
+					"when": "view == agentMemory.files",
+					"group": "navigation"
+				},
+				{
 					"command": "agentMemory.clearLogs",
 					"when": "view == agentMemory.activityLog",
 					"group": "navigation"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "agentMemory.deleteMemoryFile",
+					"when": "view == agentMemory.files && viewItem == memoryFile",
+					"group": "inline"
 				}
 			]
 		}
