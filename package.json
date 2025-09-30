@@ -220,6 +220,16 @@
 				}
 			]
 		},
+		"viewsWelcome": [
+			{
+				"view": "agentMemory.files",
+				"contents": "No memory files yet.\nMemory files are created when AI agents use the memory tool to store information.\n[Refresh](command:agentMemory.refresh)"
+			},
+			{
+				"view": "agentMemory.activityLog",
+				"contents": "No activity yet.\nActivity will appear here when AI agents interact with the memory tool.\n[Clear Logs](command:agentMemory.clearLogs)"
+			}
+		],
 		"commands": [
 			{
 				"command": "agentMemory.refresh",
