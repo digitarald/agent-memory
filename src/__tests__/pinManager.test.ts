@@ -4,7 +4,11 @@ import type * as vscode from 'vscode';
 // Mock vscode module
 jest.mock('vscode', () => ({
 	Uri: {
-		file: (path: string) => ({ fsPath: path, path })
+		file: (path: string) => ({ 
+			fsPath: path, 
+			path,
+			scheme: 'file'
+		})
 	}
 }), { virtual: true });
 
@@ -22,7 +26,7 @@ const mockContext = {
 
 const mockWorkspaceFolder = {
 	name: 'test-workspace',
-	uri: { fsPath: '/test/path', path: '/test/path' }
+	uri: { fsPath: '/test/path', path: '/test/path', scheme: 'file' }
 } as unknown as vscode.WorkspaceFolder;
 
 describe('PinManager', () => {
