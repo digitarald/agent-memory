@@ -56,6 +56,16 @@ This is a VS Code extension (`agent-memory`) that implements Claude's memory too
 2. **Commands**: Register in `extension.ts` and declare in `package.json` under `contributes.commands`
 3. **Configuration**: Add settings in `package.json` under `contributes.configuration`
 
+### CI/CD Workflows
+- **Build & Test** (`build-test.yml`): Reusable workflow for running tests and compilation
+- **Build & Release** (`build-release.yml`): Automatically builds and creates GitHub releases on every push to main
+  - Generates build version (e.g., `0.1.0-build.2+768e41f`)
+  - Creates VSIX package
+  - Creates GitHub Release with VSIX as pre-release
+  - Uploads VSIX as workflow artifact (30 days retention)
+- **Publish Pre-release** (`publish-prerelease.yml`): Publishes pre-release to VS Code Marketplace on push to main
+- **Publish** (`publish.yml`): Publishes stable release to VS Code Marketplace on version tags (e.g., `v1.0.0`)
+
 ## Project-Specific Conventions
 
 ### TypeScript Configuration
