@@ -53,14 +53,14 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('agentMemory.deleteMemoryFile', async (fileInfo) => {
-			if (!fileInfo || fileInfo.isDirectory) {
+		vscode.commands.registerCommand('agentMemory.deleteMemoryFile', async (treeItem) => {
+			if (!treeItem || treeItem.fileInfo.isDirectory) {
 				return;
 			}
 
 			try {
-				await memoryTool.deleteMemoryFile(fileInfo.path);
-				vscode.window.showInformationMessage(`Memory file '${fileInfo.name}' has been deleted.`);
+				await memoryTool.deleteMemoryFile(treeItem.fileInfo.path);
+				vscode.window.showInformationMessage(`Memory file '${treeItem.fileInfo.name}' has been deleted.`);
 			} catch (error) {
 				vscode.window.showErrorMessage(`Failed to delete file: ${error instanceof Error ? error.message : String(error)}`);
 			}
@@ -141,8 +141,10 @@ export function activate(context: vscode.ExtensionContext) {
 					? treeItem.fileInfo.name 
 					: `${treeItem.fileInfo.name}.md`;
 
+				const defaultUri = vscode.Uri.joinPath(workspaceFolders[0].uri, defaultFileName);
+
 				const saveUri = await vscode.window.showSaveDialog({
-					defaultUri: vscode.Uri.file(defaultFileName),
+					defaultUri,
 					filters: {
 						'Markdown Files': ['md'],
 						'All Files': ['*']
