@@ -1,5 +1,16 @@
-import * as vscode from 'vscode';
 import { PinManager } from '../pinManager.js';
+import type * as vscode from 'vscode';
+
+// Mock vscode module
+jest.mock('vscode', () => ({
+	Uri: {
+		file: (path: string) => ({ 
+			fsPath: path, 
+			path,
+			scheme: 'file'
+		})
+	}
+}), { virtual: true });
 
 // Mock VSCode APIs
 const mockContext = {
@@ -15,8 +26,8 @@ const mockContext = {
 
 const mockWorkspaceFolder = {
 	name: 'test-workspace',
-	uri: vscode.Uri.file('/test/path')
-} as vscode.WorkspaceFolder;
+	uri: { fsPath: '/test/path', path: '/test/path', scheme: 'file' }
+} as unknown as vscode.WorkspaceFolder;
 
 describe('PinManager', () => {
 	let pinManager: PinManager;
