@@ -28,6 +28,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(memoryFilesView, activityLogView);
 
+	// Initialize context state
+	memoryFilesProvider.refresh();
+
 	// Register commands
 	context.subscriptions.push(
 		vscode.commands.registerCommand('agentMemory.refresh', () => {
