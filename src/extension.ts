@@ -68,7 +68,10 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('agentMemory.openMemoryFile', async (fileInfo) => {
+		vscode.commands.registerCommand('agentMemory.openMemoryFile', async (item) => {
+			// Handle both tree item (with fileInfo property) and direct fileInfo object
+			const fileInfo = item.fileInfo || item;
+			
 			if (!fileInfo || fileInfo.isDirectory) {
 				return;
 			}
