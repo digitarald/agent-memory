@@ -81,6 +81,20 @@ export class MemoryFilesProvider implements vscode.TreeDataProvider<MemoryFileTr
 
 	refresh(): void {
 		this._onDidChangeTreeData.fire();
+		// Update context to reflect whether files exist
+		this.updateContext();
+	}
+
+	private async updateContext(): Promise<void> {
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		if (!workspaceFolders || workspaceFolders.length === 0) {
+			await vscode.commands.executeCommand('setContext', 'agentMemory.hasFiles', false);
+			return;
+		}
+
+		const storage = this.memoryTool.getStorageForWorkspace(workspaceFolders[0]);
+		const allFiles = await storage.listFiles();
+		await vscode.commands.executeCommand('setContext', 'agentMemory.hasFiles', allFiles.length > 0);
 	}
 
 	getTreeItem(element: MemoryFileTreeItem): vscode.TreeItem {
