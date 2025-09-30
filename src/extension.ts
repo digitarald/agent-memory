@@ -56,14 +56,14 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('agentMemory.deleteMemoryFile', async (fileInfo) => {
-			if (!fileInfo || fileInfo.isDirectory) {
+		vscode.commands.registerCommand('agentMemory.deleteMemoryFile', async (treeItem) => {
+			if (!treeItem || treeItem.fileInfo.isDirectory) {
 				return;
 			}
 
 			try {
-				await memoryTool.deleteMemoryFile(fileInfo.path);
-				vscode.window.showInformationMessage(`Memory file '${fileInfo.name}' has been deleted.`);
+				await memoryTool.deleteMemoryFile(treeItem.fileInfo.path);
+				vscode.window.showInformationMessage(`Memory file '${treeItem.fileInfo.name}' has been deleted.`);
 			} catch (error) {
 				vscode.window.showErrorMessage(`Failed to delete file: ${error instanceof Error ? error.message : String(error)}`);
 			}
@@ -71,7 +71,10 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand('agentMemory.openMemoryFile', async (fileInfo) => {
+		vscode.commands.registerCommand('agentMemory.openMemoryFile', async (item) => {
+			// Handle both tree item (with fileInfo property) and direct fileInfo object
+			const fileInfo = item.fileInfo || item;
+			
 			if (!fileInfo || fileInfo.isDirectory) {
 				return;
 			}
@@ -121,6 +124,48 @@ export function activate(context: vscode.ExtensionContext) {
 			memoryFilesProvider.refresh();
 
 			vscode.window.showInformationMessage(`Unpinned: ${treeItem.fileInfo.name}`);
+		})
+	);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('agentMemory.saveAsMarkdown', async (treeItem) => {
+			if (!treeItem || treeItem.fileInfo.isDirectory) {
+				return;
+			}
+
+			const workspaceFolders = vscode.workspace.workspaceFolders;
+			if (!workspaceFolders || workspaceFolders.length === 0) {
+				return;
+			}
+
+			try {
+				const storage = memoryTool.getStorageForWorkspace(workspaceFolders[0]);
+				const content = await storage.readRaw(treeItem.fileInfo.path);
+
+				// Prompt user for save location
+				const defaultFileName = treeItem.fileInfo.name.endsWith('.md') 
+					? treeItem.fileInfo.name 
+					: `${treeItem.fileInfo.name}.md`;
+
+				const defaultUri = vscode.Uri.joinPath(workspaceFolders[0].uri, defaultFileName);
+
+				const saveUri = await vscode.window.showSaveDialog({
+					defaultUri,
+					filters: {
+						'Markdown Files': ['md'],
+						'All Files': ['*']
+					},
+					saveLabel: 'Save as Markdown'
+				});
+
+				if (saveUri) {
+					// Write the content to the selected file
+					await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf8'));
+					vscode.window.showInformationMessage(`Memory saved to ${saveUri.fsPath}`);
+				}
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to save file: ${error instanceof Error ? error.message : String(error)}`);
+			}
 		})
 	);
 
