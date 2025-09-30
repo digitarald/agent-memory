@@ -43,19 +43,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('agentMemory.clearAllMemoryFiles', async () => {
-			const answer = await vscode.window.showWarningMessage(
-				'Are you sure you want to delete all memory files? This action cannot be undone.',
-				{ modal: true },
-				'Delete All'
-			);
-
-			if (answer === 'Delete All') {
-				try {
-					await memoryTool.clearAllMemoryFiles();
-					vscode.window.showInformationMessage('All memory files have been deleted.');
-				} catch (error) {
-					vscode.window.showErrorMessage(`Failed to clear memory files: ${error instanceof Error ? error.message : String(error)}`);
-				}
+			try {
+				await memoryTool.clearAllMemoryFiles();
+				vscode.window.showInformationMessage('All memory files have been deleted.');
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to clear memory files: ${error instanceof Error ? error.message : String(error)}`);
 			}
 		})
 	);
@@ -66,19 +58,11 @@ export function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			const answer = await vscode.window.showWarningMessage(
-				`Are you sure you want to delete '${fileInfo.name}'? This action cannot be undone.`,
-				{ modal: true },
-				'Delete'
-			);
-
-			if (answer === 'Delete') {
-				try {
-					await memoryTool.deleteMemoryFile(fileInfo.path);
-					vscode.window.showInformationMessage(`Memory file '${fileInfo.name}' has been deleted.`);
-				} catch (error) {
-					vscode.window.showErrorMessage(`Failed to delete file: ${error instanceof Error ? error.message : String(error)}`);
-				}
+			try {
+				await memoryTool.deleteMemoryFile(fileInfo.path);
+				vscode.window.showInformationMessage(`Memory file '${fileInfo.name}' has been deleted.`);
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to delete file: ${error instanceof Error ? error.message : String(error)}`);
 			}
 		})
 	);
