@@ -106,13 +106,6 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				this.activityLogger.log('rename', params.old_path, true, `New path: ${params.new_path}`);
 				break;
 			}
-		default: {
-			const errorMsg = `Unknown command: ${String((params as { command?: string }).command)}`;
-			this.activityLogger.log('unknown', '', false, errorMsg);
-			return new vscode.LanguageModelToolResult([
-				new vscode.LanguageModelTextPart(errorMsg)
-			]);
-		}
 			}
 
 			return new vscode.LanguageModelToolResult([
@@ -249,8 +242,14 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 		}
 
 		const storage = this.getStorage(workspaceFolders[0]);
-		await storage.delete(filePath);
-		this.activityLogger.log('delete', filePath, true);
+		try {
+			await storage.delete(filePath);
+			this.activityLogger.log('delete', filePath, true);
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.activityLogger.log('delete', filePath, false, errorMsg);
+			throw error;
+		}
 	}
 }
 
