@@ -86,15 +86,20 @@ export class MemoryFilesProvider implements vscode.TreeDataProvider<MemoryFileTr
 	}
 
 	private async updateContext(): Promise<void> {
-		const workspaceFolders = vscode.workspace.workspaceFolders;
-		if (!workspaceFolders || workspaceFolders.length === 0) {
-			await vscode.commands.executeCommand('setContext', 'agentMemory.hasFiles', false);
-			return;
-		}
+		try {
+			const workspaceFolders = vscode.workspace.workspaceFolders;
+			if (!workspaceFolders || workspaceFolders.length === 0) {
+				await vscode.commands.executeCommand('setContext', 'agentMemory.hasFiles', false);
+				return;
+			}
 
-		const storage = this.memoryTool.getStorageForWorkspace(workspaceFolders[0]);
-		const allFiles = await storage.listFiles();
-		await vscode.commands.executeCommand('setContext', 'agentMemory.hasFiles', allFiles.length > 0);
+			const storage = this.memoryTool.getStorageForWorkspace(workspaceFolders[0]);
+			const allFiles = await storage.listFiles();
+			await vscode.commands.executeCommand('setContext', 'agentMemory.hasFiles', allFiles.length > 0);
+		} catch {
+			// Fail silently - context is non-critical UI state
+			// If this fails, worst case is button visibility is incorrect temporarily
+		}
 	}
 
 	getTreeItem(element: MemoryFileTreeItem): vscode.TreeItem {
