@@ -271,6 +271,12 @@
 				"title": "Unpin File",
 				"category": "Agent Memory",
 				"icon": "$(pinned)"
+			},
+			{
+				"command": "agentMemory.saveAsMarkdown",
+				"title": "Save as Markdown",
+				"category": "Agent Memory",
+				"icon": "$(save)"
 			}
 		],
 		"menus": {
@@ -316,6 +322,16 @@
 					"command": "agentMemory.deleteMemoryFile",
 					"when": "view == agentMemory.files && viewItem == memoryFile",
 					"group": "inline"
+				},
+				{
+					"command": "agentMemory.saveAsMarkdown",
+					"when": "view == agentMemory.files && viewItem == memoryFile",
+					"group": "export"
+				},
+				{
+					"command": "agentMemory.saveAsMarkdown",
+					"when": "view == agentMemory.files && viewItem == memoryFilePinned",
+					"group": "export"
 				}
 			]
 		}

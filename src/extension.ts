@@ -121,6 +121,46 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
+	context.subscriptions.push(
+		vscode.commands.registerCommand('agentMemory.saveAsMarkdown', async (treeItem) => {
+			if (!treeItem || treeItem.fileInfo.isDirectory) {
+				return;
+			}
+
+			const workspaceFolders = vscode.workspace.workspaceFolders;
+			if (!workspaceFolders || workspaceFolders.length === 0) {
+				return;
+			}
+
+			try {
+				const storage = memoryTool.getStorageForWorkspace(workspaceFolders[0]);
+				const content = await storage.readRaw(treeItem.fileInfo.path);
+
+				// Prompt user for save location
+				const defaultFileName = treeItem.fileInfo.name.endsWith('.md') 
+					? treeItem.fileInfo.name 
+					: `${treeItem.fileInfo.name}.md`;
+
+				const saveUri = await vscode.window.showSaveDialog({
+					defaultUri: vscode.Uri.file(defaultFileName),
+					filters: {
+						'Markdown Files': ['md'],
+						'All Files': ['*']
+					},
+					saveLabel: 'Save as Markdown'
+				});
+
+				if (saveUri) {
+					// Write the content to the selected file
+					await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf8'));
+					vscode.window.showInformationMessage(`Memory saved to ${saveUri.fsPath}`);
+				}
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to save file: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		})
+	);
+
 	// Listen for configuration changes
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration(e => {
