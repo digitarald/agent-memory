@@ -208,13 +208,13 @@
 			"explorer": [
 				{
 					"id": "agentMemory.files",
-					"name": "Agent Memory Files",
+					"name": "Memory",
 					"icon": "$(database)",
 					"contextualTitle": "Agent Memory"
 				},
 				{
 					"id": "agentMemory.activityLog",
-					"name": "Memory Activity Log",
+					"name": "Memory Log",
 					"icon": "$(list-ordered)",
 					"contextualTitle": "Agent Memory"
 				}
