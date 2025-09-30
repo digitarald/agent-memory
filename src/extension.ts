@@ -42,6 +42,32 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	context.subscriptions.push(
+		vscode.commands.registerCommand('agentMemory.clearAllMemoryFiles', async () => {
+			try {
+				await memoryTool.clearAllMemoryFiles();
+				vscode.window.showInformationMessage('All memory files have been deleted.');
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to clear memory files: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		})
+	);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('agentMemory.deleteMemoryFile', async (fileInfo) => {
+			if (!fileInfo || fileInfo.isDirectory) {
+				return;
+			}
+
+			try {
+				await memoryTool.deleteMemoryFile(fileInfo.path);
+				vscode.window.showInformationMessage(`Memory file '${fileInfo.name}' has been deleted.`);
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to delete file: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		})
+	);
+
+	context.subscriptions.push(
 		vscode.commands.registerCommand('agentMemory.openMemoryFile', async (fileInfo) => {
 			if (!fileInfo || fileInfo.isDirectory) {
 				return;
