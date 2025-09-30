@@ -91,6 +91,36 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
+	context.subscriptions.push(
+		vscode.commands.registerCommand('agentMemory.pinFile', async (treeItem) => {
+			const workspaceFolders = vscode.workspace.workspaceFolders;
+			if (!workspaceFolders || workspaceFolders.length === 0) {
+				return;
+			}
+
+			const pinManager = memoryTool.getPinManagerForWorkspace(workspaceFolders[0]);
+			await pinManager.pinFile(treeItem.fileInfo.path);
+			memoryFilesProvider.refresh();
+
+			vscode.window.showInformationMessage(`Pinned: ${treeItem.fileInfo.name}`);
+		})
+	);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('agentMemory.unpinFile', async (treeItem) => {
+			const workspaceFolders = vscode.workspace.workspaceFolders;
+			if (!workspaceFolders || workspaceFolders.length === 0) {
+				return;
+			}
+
+			const pinManager = memoryTool.getPinManagerForWorkspace(workspaceFolders[0]);
+			await pinManager.unpinFile(treeItem.fileInfo.path);
+			memoryFilesProvider.refresh();
+
+			vscode.window.showInformationMessage(`Unpinned: ${treeItem.fileInfo.name}`);
+		})
+	);
+
 	// Listen for configuration changes
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration(e => {

@@ -259,6 +259,18 @@
 				"command": "agentMemory.openMemoryFile",
 				"title": "Open Memory File",
 				"category": "Agent Memory"
+			},
+			{
+				"command": "agentMemory.pinFile",
+				"title": "Pin File",
+				"category": "Agent Memory",
+				"icon": "$(pin)"
+			},
+			{
+				"command": "agentMemory.unpinFile",
+				"title": "Unpin File",
+				"category": "Agent Memory",
+				"icon": "$(pinned)"
 			}
 		],
 		"menus": {
@@ -280,6 +292,26 @@
 				}
 			],
 			"view/item/context": [
+				{
+					"command": "agentMemory.pinFile",
+					"when": "view == agentMemory.files && viewItem == memoryFile",
+					"group": "inline"
+				},
+				{
+					"command": "agentMemory.unpinFile",
+					"when": "view == agentMemory.files && viewItem == memoryFilePinned",
+					"group": "inline"
+				},
+				{
+					"command": "agentMemory.pinFile",
+					"when": "view == agentMemory.files && viewItem == memoryDirectory",
+					"group": "inline"
+				},
+				{
+					"command": "agentMemory.unpinFile",
+					"when": "view == agentMemory.files && viewItem == memoryDirectoryPinned",
+					"group": "inline"
+				},
 				{
 					"command": "agentMemory.deleteMemoryFile",
 					"when": "view == agentMemory.files && viewItem == memoryFile",

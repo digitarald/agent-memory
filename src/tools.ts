@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { IMemoryParameters, IMemoryStorage } from './types.js';
 import { InMemoryStorage, DiskMemoryStorage } from './storage.js';
 import { MemoryActivityLogger } from './activityLogger.js';
+import { PinManager } from './pinManager.js';
 
 /**
  * Gets the configured storage backend for a workspace
@@ -23,9 +24,12 @@ function cleanPath(path: string): string {
  */
 export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 	private storageMap = new Map<string, IMemoryStorage>();
+	private pinManagerMap = new Map<string, PinManager>();
 	private activityLogger: MemoryActivityLogger;
+	private context: vscode.ExtensionContext;
 
-	constructor(activityLogger: MemoryActivityLogger) {
+	constructor(context: vscode.ExtensionContext, activityLogger: MemoryActivityLogger) {
+		this.context = context;
 		this.activityLogger = activityLogger;
 	}
 
@@ -37,10 +41,25 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 			const storage = backend === 'disk'
 				? new DiskMemoryStorage(workspaceFolder)
 				: new InMemoryStorage(workspaceFolder);
+
+			// Create and associate PIN manager
+			const pinManager = new PinManager(this.context, workspaceFolder, false); // workspace-scoped by default
+			storage.setPinManager(pinManager);
+
 			this.storageMap.set(workspaceId, storage);
+			this.pinManagerMap.set(workspaceId, pinManager);
 		}
 
 		return this.storageMap.get(workspaceId)!;
+	}
+
+	/**
+	 * Get PIN manager for a specific workspace
+	 */
+	getPinManagerForWorkspace(workspaceFolder: vscode.WorkspaceFolder): PinManager {
+		const workspaceId = workspaceFolder.uri.toString();
+		this.getStorage(workspaceFolder); // Ensure storage and PIN manager are initialized
+		return this.pinManagerMap.get(workspaceId)!;
 	}
 
 	async invoke(
@@ -106,6 +125,14 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				this.activityLogger.log('rename', params.old_path, true, `New path: ${params.new_path}`);
 				break;
 			}
+
+			default: {
+					const errorMsg = `Unknown command: ${(params as { command: string }).command}`;
+					this.activityLogger.log('unknown', '', false, errorMsg);
+					return new vscode.LanguageModelToolResult([
+						new vscode.LanguageModelTextPart(errorMsg)
+					]);
+				}
 			}
 
 			return new vscode.LanguageModelToolResult([
@@ -205,6 +232,7 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 	 */
 	clearStorageCache(): void {
 		this.storageMap.clear();
+		this.pinManagerMap.clear();
 	}
 
 	/**
@@ -257,7 +285,7 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
  * Register the memory tool
  */
 export function registerMemoryTool(context: vscode.ExtensionContext, activityLogger: MemoryActivityLogger): MemoryTool {
-	const memoryTool = new MemoryTool(activityLogger);
+	const memoryTool = new MemoryTool(context, activityLogger);
 	context.subscriptions.push(
 		vscode.lm.registerTool('agent-memory_memory', memoryTool)
 	);

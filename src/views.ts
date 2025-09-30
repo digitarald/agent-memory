@@ -16,7 +16,13 @@ class MemoryFileTreeItem extends vscode.TreeItem {
 
 		this.tooltip = this.getTooltip();
 		this.description = this.getDescription();
-		this.contextValue = fileInfo.isDirectory ? 'memoryDirectory' : 'memoryFile';
+
+		// Set context value based on type and PIN state for menu commands
+		if (fileInfo.isDirectory) {
+			this.contextValue = fileInfo.isPinned ? 'memoryDirectoryPinned' : 'memoryDirectory';
+		} else {
+			this.contextValue = fileInfo.isPinned ? 'memoryFilePinned' : 'memoryFile';
+		}
 
 		if (!fileInfo.isDirectory) {
 			this.command = {
@@ -26,18 +32,25 @@ class MemoryFileTreeItem extends vscode.TreeItem {
 			};
 		}
 
-		// Set icon
-		this.iconPath = fileInfo.isDirectory
-			? new vscode.ThemeIcon('folder')
-			: new vscode.ThemeIcon('file');
+		// Set icon based on file type and PIN state
+		if (fileInfo.isDirectory) {
+			this.iconPath = fileInfo.isPinned
+				? new vscode.ThemeIcon('folder-active')
+				: new vscode.ThemeIcon('folder');
+		} else {
+			this.iconPath = fileInfo.isPinned
+				? new vscode.ThemeIcon('pinned', new vscode.ThemeColor('charts.yellow'))
+				: new vscode.ThemeIcon('file');
+		}
 	}
 
 	private getTooltip(): string {
 		const size = formatSize(this.fileInfo.size);
 		const accessed = formatRelativeTime(this.fileInfo.lastAccessed);
 		const modified = formatRelativeTime(this.fileInfo.lastModified);
+		const pinned = this.fileInfo.isPinned ? ' (PINNED)' : '';
 
-		return `${this.fileInfo.path}\n` +
+		return `${this.fileInfo.path}${pinned}\n` +
 			`Size: ${size}\n` +
 			`Last accessed: ${accessed}\n` +
 			`Last modified: ${modified}`;

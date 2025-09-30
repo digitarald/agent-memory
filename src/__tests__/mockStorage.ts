@@ -1,4 +1,4 @@
-import { IMemoryStorage, IMemoryFileInfo } from '../types';
+import { IMemoryStorage, IMemoryFileInfo, IPinManager } from '../types';
 import { validateMemoryPath } from '../lib/pathValidation';
 import { TextUtils } from '../lib/utils';
 
@@ -10,11 +10,16 @@ export class MockMemoryStorage implements IMemoryStorage {
 	private files = new Map<string, string>();
 	private directories = new Set<string>();
 	private workspaceId: string;
+	private pinManager?: IPinManager;
 
 	constructor(workspaceId = 'test-workspace') {
 		this.workspaceId = workspaceId;
 		// Initialize root directory
 		this.directories.add('/memories');
+	}
+
+	setPinManager(pinManager: IPinManager): void {
+		this.pinManager = pinManager;
 	}
 
 	getWorkspaceId(): string {
@@ -243,7 +248,8 @@ export class MockMemoryStorage implements IMemoryStorage {
 				isDirectory: false,
 				size: Buffer.from(content).length,
 				lastAccessed: now,
-				lastModified: now
+				lastModified: now,
+				isPinned: this.pinManager ? await this.pinManager.isPinned(path) : false
 			});
 		}
 
@@ -258,7 +264,8 @@ export class MockMemoryStorage implements IMemoryStorage {
 					isDirectory: true,
 					size: 0,
 					lastAccessed: now,
-					lastModified: now
+					lastModified: now,
+					isPinned: this.pinManager ? await this.pinManager.isPinned(path) : false
 				});
 			}
 		}

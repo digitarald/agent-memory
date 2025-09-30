@@ -1,7 +1,5 @@
 # VS Code Language Model Tools Development Guide
 
-CRITICAL: Treat as living documentation and UPDATE as needed when APIs or patterns change.
-
 ## Project Overview
 This is a VS Code extension (`agent-memory`) that implements Claude's memory tool for Language Model agents. The extension provides a single comprehensive tool (`memory`) that enables AI agents to store and retrieve information across conversations through a persistent memory file system. All memory operations are scoped to the `/memories` directory with path traversal protection for security.
 
@@ -178,3 +176,6 @@ Rename or move a file/directory.
 ## Testing Notes
 - **Tool filtering**: Tools can be filtered by tags using `vscode.lm.tools.filter(tool => tool.tags.includes('tag-name'))`
 - **Tool references**: Chat participants can force specific tool invocation using `request.toolReferences`
+
+
+**CRITICAL**: Treat as living documentation and UPDATE as needed when APIs or patterns change.

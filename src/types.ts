@@ -85,6 +85,7 @@ export interface IMemoryFileInfo {
 	size: number;
 	lastAccessed: Date;
 	lastModified: Date;
+	isPinned?: boolean;
 }
 
 /**
@@ -96,6 +97,46 @@ export interface IMemoryActivityLog {
 	path: string;
 	details?: string;
 	success: boolean;
+}
+
+/**
+ * PIN manager interface for persisting PIN states
+ */
+export interface IPinManager {
+	/**
+	 * Check if a file is pinned
+	 */
+	isPinned(path: string): Promise<boolean>;
+
+	/**
+	 * Pin a file to persist it
+	 */
+	pinFile(path: string): Promise<void>;
+
+	/**
+	 * Unpin a file
+	 */
+	unpinFile(path: string): Promise<void>;
+
+	/**
+	 * Get all pinned file paths
+	 */
+	getPinnedFiles(): Promise<string[]>;
+
+	/**
+	 * Get the workspace ID this PIN manager is for
+	 */
+	getWorkspaceId(): string;
+
+	/**
+	 * Update the PIN state when a file is renamed
+	 */
+	updatePinnedPath(oldPath: string, newPath: string): Promise<void>;
+
+	/**
+	 * Clean up PIN state when a file is deleted
+	 */
+	removePinnedPath(path: string): Promise<void>;
 }
 
 /**
@@ -147,4 +188,9 @@ export interface IMemoryStorage {
 	 * Get workspace identifier
 	 */
 	getWorkspaceId(): string;
+
+	/**
+	 * Set PIN manager for this storage instance
+	 */
+	setPinManager(pinManager: IPinManager): void;
 }
