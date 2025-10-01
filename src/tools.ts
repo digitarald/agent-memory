@@ -1,15 +1,15 @@
 import * as vscode from 'vscode';
 import { IMemoryParameters, IMemoryStorage } from './types.js';
-import { InMemoryStorage, DiskMemoryStorage } from './storage.js';
+import { InMemoryStorage, DiskMemoryStorage, SecretMemoryStorage } from './storage.js';
 import { MemoryActivityLogger } from './activityLogger.js';
 import { PinManager } from './pinManager.js';
 
 /**
  * Gets the configured storage backend for a workspace
  */
-function getStorageBackend(_workspaceFolder: vscode.WorkspaceFolder): 'memory' | 'disk' {
+function getStorageBackend(_workspaceFolder: vscode.WorkspaceFolder): 'memory' | 'disk' | 'secret' {
 	const config = vscode.workspace.getConfiguration('agentMemory');
-	return config.get<'memory' | 'disk'>('storageBackend', 'memory');
+	return config.get<'memory' | 'disk' | 'secret'>('storageBackend', 'memory');
 }
 
 /**
@@ -38,9 +38,15 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 
 		if (!this.storageMap.has(workspaceId)) {
 			const backend = getStorageBackend(workspaceFolder);
-			const storage = backend === 'disk'
-				? new DiskMemoryStorage(workspaceFolder)
-				: new InMemoryStorage(workspaceFolder);
+			let storage: IMemoryStorage;
+
+			if (backend === 'disk') {
+				storage = new DiskMemoryStorage(workspaceFolder);
+			} else if (backend === 'secret') {
+				storage = new SecretMemoryStorage(this.context, workspaceFolder);
+			} else {
+				storage = new InMemoryStorage(workspaceFolder);
+			}
 
 			// Create and associate PIN manager
 			const pinManager = new PinManager(this.context, workspaceFolder, false); // workspace-scoped by default
@@ -287,7 +293,7 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 export function registerMemoryTool(context: vscode.ExtensionContext, activityLogger: MemoryActivityLogger): MemoryTool {
 	const memoryTool = new MemoryTool(context, activityLogger);
 	context.subscriptions.push(
-		vscode.lm.registerTool('agent-memory_memory', memoryTool)
+		vscode.lm.registerTool('memory', memoryTool)
 	);
 	return memoryTool;
 }

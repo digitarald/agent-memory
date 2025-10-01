@@ -19,10 +19,11 @@ All operations are scoped to the `/memories` directory with path traversal prote
 
 ### Storage Backends
 
-Choose between two storage options via settings (`agentMemory.storageBackend`):
+Choose between three storage options via settings (`agentMemory.storageBackend`):
 
 1. **In-Memory (default)**: Ephemeral storage per workspace, cleared when VS Code closes
 2. **Disk**: Persistent storage in `.vscode/memory` directory within your workspace
+3. **Secret**: Encrypted persistent storage using VS Code's Secret Storage API - ideal for sensitive information
 
 ### Visual Interface
 
@@ -30,7 +31,9 @@ Choose between two storage options via settings (`agentMemory.storageBackend`):
 - Tree view showing all memory files and directories
 - Display file size and last access time
 - Click to open and view file contents
+- **Pin/Unpin Files**: Pin important files to keep them at the top of the tree view
 - Automatic refresh when memory operations occur
+- Context menu actions: pin/unpin, delete, save as markdown
 
 #### Activity Log View
 - Real-time log of all memory operations
@@ -56,11 +59,16 @@ Agent: I'll store that preference in memory.
 
 - **Agent Memory: Refresh Memory Files** - Manually refresh the memory files view
 - **Agent Memory: Clear Activity Logs** - Clear the activity log
+- **Agent Memory: Clear All Memory Files** - Delete all memory files and directories
+- **Agent Memory: Delete Memory File** - Delete a specific memory file (available in context menu)
 - **Agent Memory: Open Memory File** - Open a memory file for viewing
+- **Agent Memory: Pin File** - Pin a file to keep it at the top of the tree view
+- **Agent Memory: Unpin File** - Remove pin from a file
+- **Agent Memory: Save as Markdown** - Export a memory file as a markdown document
 
 ### Settings
 
-- `agentMemory.storageBackend`: Choose between `memory` (default) or `disk` storage
+- `agentMemory.storageBackend`: Choose between `memory` (default), `disk`, or `secret` storage
 
 ## Memory Tool API
 
@@ -125,6 +133,14 @@ Agent: I'll store that preference in memory.
 - Memory operations are restricted to the `/memories` directory only
 - Path normalization prevents access outside the memory directory
 
+### Secret Storage Backend
+
+The secret storage backend uses VS Code's built-in Secret Storage API, which:
+- Encrypts memory files using the platform's secure credential storage (Keychain on macOS, Credential Vault on Windows, Secret Service on Linux)
+- Stores file metadata separately for efficient listing operations
+- Provides workspace-scoped secrets that persist across VS Code sessions
+- Ideal for storing sensitive information like API keys, tokens, or personal notes
+
 ## Running the Extension
 
 - Run `npm install` in terminal to install dependencies
@@ -135,7 +151,7 @@ Agent: I'll store that preference in memory.
 
 ## Architecture
 
-- **Storage Layer**: Abstracted storage interface supporting multiple backends (in-memory and disk)
+- **Storage Layer**: Abstracted storage interface supporting multiple backends (in-memory, disk, and secret)
 - **Activity Logger**: Tracks all memory operations with metadata
 - **Tree Providers**: Real-time UI updates for files and activity logs
 - **Tool Integration**: Native VS Code Language Model Tool API
@@ -144,7 +160,7 @@ See [tools.ts](src/tools.ts) for the memory tool implementation, [storage.ts](sr
 
 ## Requirements
 
-- VS Code 1.100.0 or higher
+- VS Code 1.105.0 or higher
 - A workspace folder must be open to use memory features
 
 ## Credits

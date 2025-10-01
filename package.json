@@ -10,7 +10,7 @@
 	"version": "0.1.0",
 	"license": "MIT",
 	"engines": {
-		"vscode": "^1.100.0"
+		"vscode": "^1.105.0"
 	},
 	"categories": [
 		"AI",
@@ -20,7 +20,7 @@
 	"contributes": {
 		"languageModelTools": [
 			{
-				"name": "agent-memory_memory",
+				"name": "memory",
 				"tags": [
 					"memory",
 					"context",
@@ -28,7 +28,7 @@
 				],
 				"toolReferenceName": "memory",
 				"displayName": "Memory",
-				"modelDescription": "Store and retrieve information across conversations through a memory file directory. Supports creating, reading, updating, and deleting files in /memories directory.",
+				"modelDescription": "Enables storing and retrieving information across conversations through a persistent memory file directory. This tool allows you to create, read, update, and delete files in the /memories directory that persist between sessions, allowing you to build knowledge over time without keeping everything in the context window. Use this tool to maintain project context across multiple executions, learn from past interactions and decisions, build knowledge bases over time, and enable cross-conversation learning where you can improve at recurring workflows. IMPORTANT: ALWAYS view your memory directory before doing anything else to check for earlier progress. As you make progress on tasks, record status, progress, and thoughts in your memory. Assume your context window might be reset at any moment, so you risk losing any progress that is not recorded in your memory directory. When editing your memory folder, always try to keep its content up-to-date, coherent and organized. You can rename or delete files that are no longer relevant. Do not create new files unless necessary. All operations are restricted to the /memories directory for security.",
 				"canBeReferencedInPrompt": true,
 				"icon": "$(database)",
 				"inputSchema": {
@@ -44,11 +44,11 @@
 								"delete",
 								"rename"
 							],
-							"description": "The memory operation to perform"
+							"description": "The memory operation to perform. 'view' shows directory contents or reads file contents (optionally with line ranges). 'create' creates a new file or overwrites an existing file with the provided content. 'str_replace' replaces the first occurrence of old_str with new_str in a file. 'insert' inserts text at a specific line number (1-indexed). 'delete' removes a file or recursively deletes a directory. 'rename' moves or renames a file or directory to a new path."
 						},
 						"path": {
 							"type": "string",
-							"description": "Path to the file or directory (for view, create, str_replace, insert, delete commands)"
+							"description": "The absolute path to the file or directory within the /memories directory. Must start with /memories/ to ensure security. Used for view, create, str_replace, insert, and delete commands. For view commands on directories, this returns the list of files and subdirectories. For view commands on files, this returns the file contents (optionally filtered by view_range). This path is validated to prevent directory traversal attacks."
 						},
 						"view_range": {
 							"type": "array",
@@ -57,35 +57,35 @@
 							},
 							"minItems": 2,
 							"maxItems": 2,
-							"description": "Optional: [start_line, end_line] for viewing specific lines"
+							"description": "Optional parameter for the view command that specifies which lines to read from a file. Must be an array of exactly two numbers: [start_line, end_line], where both are 1-indexed line numbers (inclusive). For example, [1, 10] reads the first 10 lines. Use this when you only need to see a portion of a large file rather than loading the entire contents. Only applicable when viewing files, not directories."
 						},
 						"file_text": {
 							"type": "string",
-							"description": "File content (for create command)"
+							"description": "The complete content to write to the file when using the create command. This will create a new file if it doesn't exist, or completely overwrite an existing file with the new content. The content should be the full text you want the file to contain after the operation completes. Use newline characters (\n) to create multi-line files. Required parameter for the create command."
 						},
 						"old_str": {
 							"type": "string",
-							"description": "Text to replace (for str_replace command)"
+							"description": "The exact text string to find and replace when using the str_replace command. This must match the text in the file character-for-character, including whitespace, indentation, and newlines. Only the first occurrence of this string will be replaced. If the string is not found in the file, the operation will fail. Use this for making targeted edits to specific portions of a file without rewriting the entire file. Required parameter for the str_replace command."
 						},
 						"new_str": {
 							"type": "string",
-							"description": "Replacement text (for str_replace command)"
+							"description": "The replacement text that will replace the first occurrence of old_str when using the str_replace command. This can be any string, including an empty string (to delete text), multi-line text, or text with different formatting than the original. The replacement happens exactly once per command invocation. Required parameter for the str_replace command."
 						},
 						"insert_line": {
 							"type": "number",
-							"description": "Line number to insert at (for insert command)"
+							"description": "The 1-indexed line number where text should be inserted when using the insert command. The new text will be inserted at this line position, shifting existing content down. For example, insert_line=1 inserts at the beginning of the file, insert_line=5 inserts before the current line 5. If the line number is greater than the number of lines in the file, the text will be appended at the end. Required parameter for the insert command."
 						},
 						"insert_text": {
 							"type": "string",
-							"description": "Text to insert (for insert command)"
+							"description": "The text content to insert at the specified line when using the insert command. This text will be inserted at the line specified by insert_line, pushing existing content down. Include newline characters (\n) if you want to insert multiple lines. The inserted text does not automatically include a trailing newline unless you explicitly add one. Required parameter for the insert command."
 						},
 						"old_path": {
 							"type": "string",
-							"description": "Current path (for rename command)"
+							"description": "The current absolute path of the file or directory to rename/move when using the rename command. Must start with /memories/ for security. This path must exist or the operation will fail. Can be used to rename a file in place (changing only the filename) or to move a file to a different directory within /memories. Required parameter for the rename command."
 						},
 						"new_path": {
 							"type": "string",
-							"description": "New path (for rename command)"
+							"description": "The new absolute path for the file or directory when using the rename command. Must start with /memories/ for security. If a file already exists at this path, it will be overwritten. Any parent directories in the path will be created automatically if they don't exist. Use this to rename files, move files between directories, or reorganize your memory directory structure. Required parameter for the rename command."
 						}
 					},
 					"required": [
@@ -193,11 +193,13 @@
 					"type": "string",
 					"enum": [
 						"memory",
-						"disk"
+						"disk",
+						"secret"
 					],
 					"enumDescriptions": [
 						"Store memory files in-memory (per workspace, ephemeral)",
-						"Store memory files in .vscode/memory directory (persistent)"
+						"Store memory files in .vscode/memory directory (persistent)",
+						"Store memory files encrypted in VS Code's secret storage (secure, persistent)"
 					],
 					"default": "memory",
 					"description": "Storage backend for memory files"

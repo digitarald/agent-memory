@@ -349,6 +349,412 @@ export class InMemoryStorage implements IMemoryStorage {
 }
 
 /**
+ * Secret storage backend
+ * Stores memory files encrypted in VS Code's secret storage
+ * File metadata is stored in a separate secret for efficient listing
+ */
+export class SecretMemoryStorage implements IMemoryStorage {
+	private secretStorage: vscode.SecretStorage;
+	private workspaceFolder: vscode.WorkspaceFolder;
+	private pinManager?: IPinManager;
+	private readonly METADATA_KEY = 'agent-memory:metadata';
+	private readonly KEY_PREFIX = 'agent-memory:file:';
+
+	constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder) {
+		this.secretStorage = context.secrets;
+		this.workspaceFolder = workspaceFolder;
+	}
+
+	setPinManager(PINMANAGER: IPinManager): void {
+		this.pinManager = PINMANAGER;
+	}
+
+	getWorkspaceId(): string {
+		return this.workspaceFolder.name;
+	}
+
+	private getSecretKey(memoryPath: string): string {
+		validateMemoryPath(memoryPath);
+		const normalizedPath = memoryPath.startsWith(MEMORIES_DIR)
+			? memoryPath
+			: path.posix.join(MEMORIES_DIR, memoryPath);
+		return `${this.KEY_PREFIX}${this.workspaceFolder.name}:${normalizedPath}`;
+	}
+
+	private getFullPath(memoryPath: string): string {
+		validateMemoryPath(memoryPath);
+		if (!memoryPath.startsWith(MEMORIES_DIR)) {
+			return path.posix.join(MEMORIES_DIR, memoryPath);
+		}
+		return memoryPath;
+	}
+
+	private async getMetadata(): Promise<Map<string, { isDirectory: boolean; size: number; modified: Date; accessed: Date }>> {
+		const METADATAKEY = `${this.METADATA_KEY}:${this.workspaceFolder.name}`;
+		const METADATAJSON = await this.secretStorage.get(METADATAKEY);
+
+		if (!METADATAJSON) {
+			return new Map();
+		}
+
+		try {
+			const METADATAOBJ = JSON.parse(METADATAJSON);
+			const METADATAMAP = new Map<string, { isDirectory: boolean; size: number; modified: Date; accessed: Date }>();
+
+			for (const [PATH, DATA] of Object.entries(METADATAOBJ)) {
+				const ENTRY = DATA as { isDirectory: boolean; size: number; modified: string; accessed: string };
+				METADATAMAP.set(PATH, {
+					isDirectory: ENTRY.isDirectory,
+					size: ENTRY.size,
+					modified: new Date(ENTRY.modified),
+					accessed: new Date(ENTRY.accessed)
+				});
+			}
+
+			return METADATAMAP;
+		} catch {
+			return new Map();
+		}
+	}
+
+	private async saveMetadata(METADATA: Map<string, { isDirectory: boolean; size: number; modified: Date; accessed: Date }>): Promise<void> {
+		const METADATAKEY = `${this.METADATA_KEY}:${this.workspaceFolder.name}`;
+		const METADATAOBJ: Record<string, { isDirectory: boolean; size: number; modified: string; accessed: string }> = {};
+
+		for (const [PATH, DATA] of METADATA.entries()) {
+			METADATAOBJ[PATH] = {
+				isDirectory: DATA.isDirectory,
+				size: DATA.size,
+				modified: DATA.modified.toISOString(),
+				accessed: DATA.accessed.toISOString()
+			};
+		}
+
+		await this.secretStorage.store(METADATAKEY, JSON.stringify(METADATAOBJ));
+	}
+
+	private async updateFileMetadata(FULLPATH: string, SIZE: number): Promise<void> {
+		const METADATA = await this.getMetadata();
+		const NOW = new Date();
+
+		// Ensure parent directories exist in metadata
+		let PARENTDIR = path.posix.dirname(FULLPATH);
+		while (PARENTDIR !== '/' && PARENTDIR !== MEMORIES_DIR) {
+			if (!METADATA.has(PARENTDIR)) {
+				METADATA.set(PARENTDIR, {
+					isDirectory: true,
+					size: 0,
+					modified: NOW,
+					accessed: NOW
+				});
+			}
+			PARENTDIR = path.posix.dirname(PARENTDIR);
+		}
+
+		// Ensure root memories directory exists
+		if (!METADATA.has(MEMORIES_DIR)) {
+			METADATA.set(MEMORIES_DIR, {
+				isDirectory: true,
+				size: 0,
+				modified: NOW,
+				accessed: NOW
+			});
+		}
+
+		METADATA.set(FULLPATH, {
+			isDirectory: false,
+			size: SIZE,
+			modified: NOW,
+			accessed: NOW
+		});
+
+		await this.saveMetadata(METADATA);
+	}
+
+	async view(memoryPath: string, viewRange?: [number, number]): Promise<string> {
+		const FULLPATH = this.getFullPath(memoryPath);
+		const METADATA = await this.getMetadata();
+		const ENTRY = METADATA.get(FULLPATH);
+
+		if (!ENTRY) {
+			// Check if path is the root memories directory
+			if (FULLPATH === MEMORIES_DIR) {
+				const ITEMS: string[] = [];
+				for (const [PATH, DATA] of METADATA.entries()) {
+					if (PATH !== MEMORIES_DIR && PATH.startsWith(MEMORIES_DIR + '/')) {
+						const RELATIVEPATH = PATH.slice(MEMORIES_DIR.length + 1);
+						if (!RELATIVEPATH.includes('/')) {
+							ITEMS.push(DATA.isDirectory ? `${RELATIVEPATH}/` : RELATIVEPATH);
+						}
+					}
+				}
+
+				if (ITEMS.length === 0) {
+					return `Directory: ${memoryPath}\n(empty - no files created yet)`;
+				}
+
+				ITEMS.sort();
+				return `Directory: ${memoryPath}\n${ITEMS.map(ITEM => `- ${ITEM}`).join('\n')}`;
+			}
+
+			throw new Error(`The file '${memoryPath}' does not exist yet. Use the 'create' command to create it first, or use 'view' on the parent directory '/memories' to see available files.`);
+		}
+
+		if (ENTRY.isDirectory) {
+			const ITEMS: string[] = [];
+			for (const [PATH, DATA] of METADATA.entries()) {
+				if (PATH !== FULLPATH && PATH.startsWith(FULLPATH + '/')) {
+					const RELATIVEPATH = PATH.slice(FULLPATH.length + 1);
+					if (!RELATIVEPATH.includes('/')) {
+						ITEMS.push(DATA.isDirectory ? `${RELATIVEPATH}/` : RELATIVEPATH);
+					}
+				}
+			}
+
+			ITEMS.sort();
+			return `Directory: ${memoryPath}\n${ITEMS.map(ITEM => `- ${ITEM}`).join('\n')}`;
+		}
+
+		// Update access time
+		ENTRY.accessed = new Date();
+		await this.saveMetadata(METADATA);
+
+		// Read file content
+		const SECRETKEY = this.getSecretKey(memoryPath);
+		const CONTENT = await this.secretStorage.get(SECRETKEY);
+
+		if (!CONTENT) {
+			throw new Error(`The file '${memoryPath}' does not exist yet. Use the 'create' command to create it first, or use 'view' on the parent directory '/memories' to see available files.`);
+		}
+
+		const LINES = CONTENT.split('\n');
+		let DISPLAYLINES = LINES;
+		let STARTNUM = 1;
+
+		if (viewRange && viewRange.length === 2) {
+			const STARTLINE = Math.max(1, viewRange[0]) - 1;
+			const ENDLINE = viewRange[1] === -1 ? LINES.length : viewRange[1];
+			DISPLAYLINES = LINES.slice(STARTLINE, ENDLINE);
+			STARTNUM = STARTLINE + 1;
+		}
+
+		const NUMBEREDLINES = DISPLAYLINES.map(
+			(LINE, I) => `${String(I + STARTNUM).padStart(4, ' ')}: ${LINE}`
+		);
+
+		return NUMBEREDLINES.join('\n');
+	}
+
+	async readRaw(memoryPath: string): Promise<string> {
+		const FULLPATH = this.getFullPath(memoryPath);
+		const METADATA = await this.getMetadata();
+		const ENTRY = METADATA.get(FULLPATH);
+
+		if (!ENTRY || ENTRY.isDirectory) {
+			throw new Error(`The file '${memoryPath}' does not exist.`);
+		}
+
+		// Update access time
+		ENTRY.accessed = new Date();
+		await this.saveMetadata(METADATA);
+
+		const SECRETKEY = this.getSecretKey(memoryPath);
+		const CONTENT = await this.secretStorage.get(SECRETKEY);
+
+		if (!CONTENT) {
+			throw new Error(`The file '${memoryPath}' does not exist.`);
+		}
+
+		return CONTENT;
+	}
+
+	async create(memoryPath: string, content: string): Promise<void> {
+		const FULLPATH = this.getFullPath(memoryPath);
+		const SECRETKEY = this.getSecretKey(memoryPath);
+
+		await this.secretStorage.store(SECRETKEY, content);
+		await this.updateFileMetadata(FULLPATH, Buffer.from(content, 'utf8').length);
+	}
+
+	async strReplace(memoryPath: string, oldStr: string, newStr: string): Promise<void> {
+		const FULLPATH = this.getFullPath(memoryPath);
+		const METADATA = await this.getMetadata();
+		const ENTRY = METADATA.get(FULLPATH);
+
+		if (!ENTRY || ENTRY.isDirectory) {
+			throw new Error(`Cannot modify '${memoryPath}' because it does not exist. Use 'create' to create the file first, or 'view' to check available files in '/memories'.`);
+		}
+
+		const TEXT = await this.readRaw(memoryPath);
+		const NEWTEXT = TextUtils.replaceFirst(TEXT, oldStr, newStr, memoryPath);
+
+		const SECRETKEY = this.getSecretKey(memoryPath);
+		await this.secretStorage.store(SECRETKEY, NEWTEXT);
+		await this.updateFileMetadata(FULLPATH, Buffer.from(NEWTEXT, 'utf8').length);
+	}
+
+	async insert(memoryPath: string, insertLine: number, insertText: string): Promise<void> {
+		const FULLPATH = this.getFullPath(memoryPath);
+		const METADATA = await this.getMetadata();
+		const ENTRY = METADATA.get(FULLPATH);
+
+		if (!ENTRY || ENTRY.isDirectory) {
+			throw new Error(`Cannot insert text into '${memoryPath}' because the file does not exist. Use 'create' to create the file first, or 'view' to check available files in '/memories'.`);
+		}
+
+		const TEXT = await this.readRaw(memoryPath);
+		const NEWTEXT = TextUtils.insertAtLine(TEXT, insertLine, insertText);
+
+		const SECRETKEY = this.getSecretKey(memoryPath);
+		await this.secretStorage.store(SECRETKEY, NEWTEXT);
+		await this.updateFileMetadata(FULLPATH, Buffer.from(NEWTEXT, 'utf8').length);
+	}
+
+	async delete(memoryPath: string): Promise<string> {
+		const FULLPATH = this.getFullPath(memoryPath);
+		const METADATA = await this.getMetadata();
+		const ENTRY = METADATA.get(FULLPATH);
+
+		if (!ENTRY) {
+			throw new Error(`Cannot delete '${memoryPath}' because it does not exist. Use 'view' on '/memories' to see what files are available to delete.`);
+		}
+
+		if (ENTRY.isDirectory) {
+			// Delete all files and subdirectories within this directory
+			const PATHSTODELETE: string[] = [];
+			for (const PATH of METADATA.keys()) {
+				if (PATH.startsWith(FULLPATH + '/')) {
+					PATHSTODELETE.push(PATH);
+				}
+			}
+
+			for (const PATH of PATHSTODELETE) {
+				const ITEMENTRY = METADATA.get(PATH);
+				if (ITEMENTRY && !ITEMENTRY.isDirectory) {
+					const SECRETKEY = this.getSecretKey(PATH);
+					await this.secretStorage.delete(SECRETKEY);
+
+					if (this.pinManager) {
+						await this.pinManager.removePinnedPath(PATH);
+					}
+				}
+				METADATA.delete(PATH);
+			}
+
+			// Don't delete the root memories directory from metadata
+			if (FULLPATH !== MEMORIES_DIR) {
+				METADATA.delete(FULLPATH);
+			}
+
+			await this.saveMetadata(METADATA);
+			return `Directory deleted: ${memoryPath}`;
+		} else {
+			const SECRETKEY = this.getSecretKey(memoryPath);
+			await this.secretStorage.delete(SECRETKEY);
+
+			if (this.pinManager) {
+				await this.pinManager.removePinnedPath(FULLPATH);
+			}
+
+			METADATA.delete(FULLPATH);
+			await this.saveMetadata(METADATA);
+
+			return `File deleted: ${memoryPath}`;
+		}
+	}
+
+	async rename(oldPath: string, newPath: string): Promise<void> {
+		const OLDFULLPATH = this.getFullPath(oldPath);
+		const NEWFULLPATH = this.getFullPath(newPath);
+		const METADATA = await this.getMetadata();
+		const ENTRY = METADATA.get(OLDFULLPATH);
+
+		if (!ENTRY) {
+			throw new Error(`Cannot rename '${oldPath}' because it does not exist. Use 'view' on '/memories' to see what files are available to rename.`);
+		}
+
+		if (ENTRY.isDirectory) {
+			// Rename directory and all its contents
+			const PATHSTORENAME: Array<[string, string]> = [];
+			for (const PATH of METADATA.keys()) {
+				if (PATH === OLDFULLPATH || PATH.startsWith(OLDFULLPATH + '/')) {
+					const NEWITEMPATH = NEWFULLPATH + PATH.slice(OLDFULLPATH.length);
+					PATHSTORENAME.push([PATH, NEWITEMPATH]);
+				}
+			}
+
+			for (const [OLDITEMPATH, NEWITEMPATH] of PATHSTORENAME) {
+				const ITEMENTRY = METADATA.get(OLDITEMPATH)!;
+
+				if (!ITEMENTRY.isDirectory) {
+					// Move the secret
+					const OLDSECRETKEY = this.getSecretKey(OLDITEMPATH);
+					const NEWSECRETKEY = this.getSecretKey(NEWITEMPATH);
+					const CONTENT = await this.secretStorage.get(OLDSECRETKEY);
+
+					if (CONTENT) {
+						await this.secretStorage.store(NEWSECRETKEY, CONTENT);
+						await this.secretStorage.delete(OLDSECRETKEY);
+					}
+
+					if (this.pinManager) {
+						await this.pinManager.updatePinnedPath(OLDITEMPATH, NEWITEMPATH);
+					}
+				}
+
+				METADATA.set(NEWITEMPATH, ITEMENTRY);
+				METADATA.delete(OLDITEMPATH);
+			}
+		} else {
+			// Rename file
+			const OLDSECRETKEY = this.getSecretKey(oldPath);
+			const NEWSECRETKEY = this.getSecretKey(newPath);
+			const CONTENT = await this.secretStorage.get(OLDSECRETKEY);
+
+			if (!CONTENT) {
+				throw new Error(`Cannot rename '${oldPath}' because it does not exist. Use 'view' on '/memories' to see what files are available to rename.`);
+			}
+
+			await this.secretStorage.store(NEWSECRETKEY, CONTENT);
+			await this.secretStorage.delete(OLDSECRETKEY);
+
+			if (this.pinManager) {
+				await this.pinManager.updatePinnedPath(OLDFULLPATH, NEWFULLPATH);
+			}
+
+			METADATA.set(NEWFULLPATH, ENTRY);
+			METADATA.delete(OLDFULLPATH);
+		}
+
+		await this.saveMetadata(METADATA);
+	}
+
+	async listFiles(): Promise<IMemoryFileInfo[]> {
+		const METADATA = await this.getMetadata();
+		const FILES: IMemoryFileInfo[] = [];
+
+		for (const [PATH, DATA] of METADATA.entries()) {
+			if (PATH === MEMORIES_DIR) {
+				continue; // Skip root directory
+			}
+
+			const INFO: IMemoryFileInfo = {
+				path: PATH,
+				name: path.posix.basename(PATH),
+				isDirectory: DATA.isDirectory,
+				size: DATA.size,
+				lastAccessed: DATA.accessed,
+				lastModified: DATA.modified,
+				isPinned: this.pinManager ? await this.pinManager.isPinned(PATH) : false
+			};
+			FILES.push(INFO);
+		}
+
+		return FILES.sort((A, B) => A.path.localeCompare(B.path));
+	}
+}
+
+/**
  * Disk-based storage backend
  * Stores memory files in .vscode/memory directory
  */
