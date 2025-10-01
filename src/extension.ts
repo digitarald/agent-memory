@@ -192,6 +192,10 @@ export function activate(context: vscode.ExtensionContext) {
 				memoryTool.clearStorageCache();
 				memoryFilesProvider.refresh();
 			}
+			if (e.affectsConfiguration('agentMemory.autoSyncToAgentsMd')) {
+				// Configuration changed - the sync manager will pick up the change on next operation
+				vscode.window.showInformationMessage('AGENTS.md auto-sync setting updated.');
+			}
 		})
 	);
 }

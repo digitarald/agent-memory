@@ -3,6 +3,7 @@ import { IMemoryParameters, IMemoryStorage } from './types.js';
 import { InMemoryStorage, DiskMemoryStorage, SecretMemoryStorage } from './storage.js';
 import { MemoryActivityLogger } from './activityLogger.js';
 import { PinManager } from './pinManager.js';
+import { AgentsMdSyncManager } from './agentsMdSync.js';
 
 /**
  * Gets the configured storage backend for a workspace
@@ -27,10 +28,12 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 	private pinManagerMap = new Map<string, PinManager>();
 	private activityLogger: MemoryActivityLogger;
 	private context: vscode.ExtensionContext;
+	private syncManager: AgentsMdSyncManager;
 
-	constructor(context: vscode.ExtensionContext, activityLogger: MemoryActivityLogger) {
+	constructor(context: vscode.ExtensionContext, activityLogger: MemoryActivityLogger, syncManager: AgentsMdSyncManager) {
 		this.context = context;
 		this.activityLogger = activityLogger;
+		this.syncManager = syncManager;
 	}
 
 	private getStorage(workspaceFolder: vscode.WorkspaceFolder): IMemoryStorage {
@@ -102,6 +105,8 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				await storage.create(params.path, params.file_text);
 				result = `File created successfully: ${cleanPath(params.path)}`;
 				this.activityLogger.log('create', params.path, true, `Size: ${params.file_text.length} bytes`);
+				// Sync to AGENTS.md if enabled
+				await this.syncManager.syncToAgentsMd(storage, workspaceFolder);
 				break;
 			}
 
@@ -109,6 +114,8 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				await storage.strReplace(params.path, params.old_str, params.new_str);
 				result = `String replaced successfully in ${cleanPath(params.path)}`;
 				this.activityLogger.log('str_replace', params.path, true);
+				// Sync to AGENTS.md if enabled
+				await this.syncManager.syncToAgentsMd(storage, workspaceFolder);
 				break;
 			}
 
@@ -116,12 +123,16 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				await storage.insert(params.path, params.insert_line, params.insert_text);
 				result = `Text inserted successfully at line ${params.insert_line} in ${cleanPath(params.path)}`;
 				this.activityLogger.log('insert', params.path, true, `Line: ${params.insert_line}`);
+				// Sync to AGENTS.md if enabled
+				await this.syncManager.syncToAgentsMd(storage, workspaceFolder);
 				break;
 			}
 
 			case 'delete': {
 				result = await storage.delete(params.path);
 				this.activityLogger.log('delete', params.path, true);
+				// Sync to AGENTS.md if enabled
+				await this.syncManager.syncToAgentsMd(storage, workspaceFolder);
 				break;
 			}
 
@@ -129,6 +140,8 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				await storage.rename(params.old_path, params.new_path);
 				result = `Renamed successfully: ${cleanPath(params.old_path)} → ${cleanPath(params.new_path)}`;
 				this.activityLogger.log('rename', params.old_path, true, `New path: ${params.new_path}`);
+				// Sync to AGENTS.md if enabled
+				await this.syncManager.syncToAgentsMd(storage, workspaceFolder);
 				break;
 			}
 
@@ -264,6 +277,9 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				}
 			}
 		}
+
+		// Sync to AGENTS.md if enabled
+		await this.syncManager.syncToAgentsMd(storage, workspaceFolders[0]);
 	}
 
 	/**
@@ -279,6 +295,8 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 		try {
 			await storage.delete(filePath);
 			this.activityLogger.log('delete', filePath, true);
+			// Sync to AGENTS.md if enabled
+			await this.syncManager.syncToAgentsMd(storage, workspaceFolders[0]);
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.activityLogger.log('delete', filePath, false, errorMsg);
@@ -291,7 +309,8 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
  * Register the memory tool
  */
 export function registerMemoryTool(context: vscode.ExtensionContext, activityLogger: MemoryActivityLogger): MemoryTool {
-	const memoryTool = new MemoryTool(context, activityLogger);
+	const syncManager = new AgentsMdSyncManager();
+	const memoryTool = new MemoryTool(context, activityLogger, syncManager);
 	context.subscriptions.push(
 		vscode.lm.registerTool('memory', memoryTool)
 	);
