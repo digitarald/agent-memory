@@ -70,6 +70,8 @@ class MemoryFileTreeItem extends vscode.TreeItem {
 export class MemoryFilesProvider implements vscode.TreeDataProvider<MemoryFileTreeItem> {
 	private _onDidChangeTreeData = new vscode.EventEmitter<MemoryFileTreeItem | undefined | null | void>();
 	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+	private _onDidChangeTotalBytes = new vscode.EventEmitter<number>();
+	readonly onDidChangeTotalBytes = this._onDidChangeTotalBytes.event;
 
 	constructor(
 		private memoryTool: MemoryTool,
@@ -90,15 +92,23 @@ export class MemoryFilesProvider implements vscode.TreeDataProvider<MemoryFileTr
 			const workspaceFolders = vscode.workspace.workspaceFolders;
 			if (!workspaceFolders || workspaceFolders.length === 0) {
 				await vscode.commands.executeCommand('setContext', 'agentMemory.hasFiles', false);
+				this._onDidChangeTotalBytes.fire(0);
 				return;
 			}
 
 			const storage = this.memoryTool.getStorageForWorkspace(workspaceFolders[0]);
 			const allFiles = await storage.listFiles();
 			await vscode.commands.executeCommand('setContext', 'agentMemory.hasFiles', allFiles.length > 0);
+			
+			// Calculate total bytes
+			const totalBytes = allFiles
+				.filter(f => !f.isDirectory)
+				.reduce((sum, f) => sum + f.size, 0);
+			this._onDidChangeTotalBytes.fire(totalBytes);
 		} catch {
 			// Fail silently - context is non-critical UI state
 			// If this fails, worst case is button visibility is incorrect temporarily
+			this._onDidChangeTotalBytes.fire(0);
 		}
 	}
 

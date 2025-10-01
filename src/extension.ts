@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { registerMemoryTool } from './tools.js';
 import { MemoryActivityLogger } from './activityLogger.js';
 import { MemoryFilesProvider, ActivityLogProvider } from './views.js';
+import { formatSize } from './lib/utils.js';
 
 export function activate(context: vscode.ExtensionContext) {
 	// Initialize activity logger
@@ -27,6 +28,21 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	context.subscriptions.push(memoryFilesView, activityLogView);
+
+	// Update memory view description with total bytes
+	const updateMemoryViewDescription = (totalBytes: number) => {
+		if (totalBytes === 0) {
+			memoryFilesView.description = undefined;
+		} else {
+			const formatted = formatSize(totalBytes);
+			memoryFilesView.description = formatted;
+		}
+	};
+
+	// Listen for changes in total bytes
+	context.subscriptions.push(
+		memoryFilesProvider.onDidChangeTotalBytes(updateMemoryViewDescription)
+	);
 
 	// Initialize context state
 	memoryFilesProvider.refresh();
