@@ -130,9 +130,9 @@ describe('AgentsMdSyncManager', () => {
 
 			const writeCall = mockFs.writeFile.mock.calls[0];
 			const content = Buffer.from(writeCall[1]).toString('utf8');
-			expect(content).toContain('<memory hint="Manage via memory tool">');
+			expect(content).toContain('<memories hint="Manage via memory tool">');
 			expect(content).toContain('(No memory files yet)');
-			expect(content).toContain('</memory>');
+			expect(content).toContain('</memories>');
 		});
 
 		it('should create memory section with file contents', async () => {
@@ -161,11 +161,11 @@ describe('AgentsMdSyncManager', () => {
 
 			const writeCall = mockFs.writeFile.mock.calls[0];
 			const content = Buffer.from(writeCall[1]).toString('utf8');
-			expect(content).toContain('<memory hint="Manage via memory tool">');
-			expect(content).toContain('<file path="/memories/test.txt">');
+			expect(content).toContain('<memories hint="Manage via memory tool">');
+			expect(content).toContain('<memory path="/memories/test.txt">');
 			expect(content).toContain('Test content');
-			expect(content).toContain('</file>');
 			expect(content).toContain('</memory>');
+			expect(content).toContain('</memories>');
 		});
 
 		it('should handle multiple files', async () => {
@@ -200,9 +200,9 @@ describe('AgentsMdSyncManager', () => {
 
 			const writeCall = mockFs.writeFile.mock.calls[0];
 			const content = Buffer.from(writeCall[1]).toString('utf8');
-			expect(content).toContain('<file path="/memories/file1.txt">');
+			expect(content).toContain('<memory path="/memories/file1.txt">');
 			expect(content).toContain('Content 1');
-			expect(content).toContain('<file path="/memories/file2.txt">');
+			expect(content).toContain('<memory path="/memories/file2.txt">');
 			expect(content).toContain('Content 2');
 		});
 
@@ -248,7 +248,7 @@ More content`;
 			expect(content).toContain('More content');
 			
 			// Should have new memory section
-			expect(content).toContain('<file path="/memories/new.txt">');
+			expect(content).toContain('<memory path="/memories/new.txt">');
 			expect(content).toContain('New content');
 			
 			// Should not have old file
@@ -290,8 +290,8 @@ More content`;
 
 			const writeCall = mockFs.writeFile.mock.calls[0];
 			const content = Buffer.from(writeCall[1]).toString('utf8');
-			expect(content).toContain('<file path="/memories/file.txt">');
-			expect(content).not.toContain('<file path="/memories/dir">');
+			expect(content).toContain('<memory path="/memories/file.txt">');
+			expect(content).not.toContain('<memory path="/memories/dir">');
 		});
 
 		it('should handle sync errors gracefully', async () => {
@@ -304,7 +304,7 @@ More content`;
 			await expect(syncManager.syncToAgentsMd(mockStorage, mockWorkspaceFolder)).resolves.not.toThrow();
 		});
 
-		it('should escape closing file tags in content', async () => {
+		it('should escape closing memory tags in content', async () => {
 			mockConfig.autoSyncToAgentsMd = true;
 			syncManager.updateConfig();
 
@@ -320,8 +320,8 @@ More content`;
 			];
 
 			mockStorage.listFiles.mockResolvedValue(mockFiles);
-			// Content contains closing file tag
-			mockStorage.readRaw.mockResolvedValue('Content with </file> tag inside');
+			// Content contains closing memory tag
+			mockStorage.readRaw.mockResolvedValue('Content with </memory> tag inside');
 
 			await syncManager.syncToAgentsMd(mockStorage, mockWorkspaceFolder);
 
@@ -329,7 +329,7 @@ More content`;
 			const content = Buffer.from(writeCall[1]).toString('utf8');
 			
 			// Should escape the closing tag in content
-			expect(content).toContain('Content with &lt;/file&gt; tag inside');
+			expect(content).toContain('Content with &lt;/memory&gt; tag inside');
 		});
 	});
 });

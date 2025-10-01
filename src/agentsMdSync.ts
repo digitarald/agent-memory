@@ -76,7 +76,7 @@ export class AgentsMdSyncManager {
 		memoryFiles: Array<{ path: string; name: string; isDirectory: boolean }>
 	): Promise<string> {
 		if (memoryFiles.length === 0) {
-			return '<memory hint="Manage via memory tool">\n(No memory files yet)\n</memory>';
+			return '<memories hint="Manage via memory tool">\n(No memory files yet)\n</memories>';
 		}
 
 		const fileSections: string[] = [];
@@ -85,26 +85,30 @@ export class AgentsMdSyncManager {
 			try {
 				const content = await storage.readRaw(file.path);
 				// Escape any existing closing tags in content to prevent XML parsing issues
-				const escapedContent = content.replace(/<\/file>/g, '&lt;/file&gt;');
-				fileSections.push(`<file path="${file.path}">\n${escapedContent}\n</file>`);
+				const escapedContent = content.replace(/<\/memory>/g, '&lt;/memory&gt;');
+				fileSections.push(`<memory path="${file.path}">\n${escapedContent}\n</memory>`);
 			} catch (error) {
 				// Skip files that can't be read
 				console.error(`Failed to read ${file.path} for AGENTS.md sync:`, error);
 			}
 		}
 
-		return `<memory hint="Manage via memory tool">\n${fileSections.join('\n\n')}\n</memory>`;
+		return `<memories hint="Manage via memory tool">\n${fileSections.join('\n\n')}\n</memories>`;
 	}
 
 	/**
 	 * Update or insert memory section in AGENTS.md content
 	 */
 	private updateMemorySection(existingContent: string, memorySection: string): string {
-		// Look for existing memory section
+		// Look for existing memory section (support both old and new tag names)
+		const memoriesRegex = /<memories\s+hint="Manage via memory tool">[\s\S]*?<\/memories>/;
 		const memoryRegex = /<memory\s+hint="Manage via memory tool">[\s\S]*?<\/memory>/;
 		
-		if (memoryRegex.test(existingContent)) {
-			// Replace existing section
+		if (memoriesRegex.test(existingContent)) {
+			// Replace existing section with new tag name
+			return existingContent.replace(memoriesRegex, memorySection);
+		} else if (memoryRegex.test(existingContent)) {
+			// Replace old tag name with new tag name
 			return existingContent.replace(memoryRegex, memorySection);
 		} else {
 			// Append to end of file with proper spacing

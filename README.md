@@ -46,8 +46,8 @@ Choose between three storage options via settings (`agentMemory.storageBackend`)
 When enabled via the `agentMemory.autoSyncToAgentsMd` setting, the extension automatically synchronizes all memory files to your workspace's `AGENTS.md` file. This provides a centralized, readable view of all agent memory in a format that's easy to review and version control.
 
 **Features:**
-- Memory content is wrapped in `<memory hint="Manage via memory tool">...</memory>` tags
-- Each file is enclosed in `<file path="/memories/...">...</file>` tags
+- Memory content is wrapped in `<memories hint="Manage via memory tool">...</memories>` tags
+- Each file is enclosed in `<memory path="/memories/...">...</memory>` tags
 - Automatically updates when memory files are created, modified, or deleted
 - Preserves existing AGENTS.md content outside the memory section
 - If no AGENTS.md exists, one will be created automatically
@@ -56,16 +56,16 @@ When enabled via the `agentMemory.autoSyncToAgentsMd` setting, the extension aut
 ```markdown
 # My Project Documentation
 
-<memory hint="Manage via memory tool">
-<file path="/memories/preferences.txt">
+<memories hint="Manage via memory tool">
+<memory path="/memories/preferences.txt">
 - Prefers TypeScript for new projects
 - Uses ESLint for code quality
-</file>
-
-<file path="/memories/context.txt">
-Project is a VS Code extension for AI agent memory management.
-</file>
 </memory>
+
+<memory path="/memories/context.txt">
+Project is a VS Code extension for AI agent memory management.
+</memory>
+</memories>
 ```
 
 ## Usage
