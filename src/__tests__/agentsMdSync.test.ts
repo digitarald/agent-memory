@@ -9,12 +9,16 @@ const mockConfig = {
 const mockFileContent = new Map<string, Uint8Array>();
 
 jest.mock('vscode', () => {
+	interface FileSystemErrorWithCode extends Error {
+		code: string;
+	}
+
 	const mockFs = {
 		readFile: jest.fn(async (uri: { fsPath?: string; path?: string }) => {
 			const path = uri.fsPath || uri.path;
 			const content = mockFileContent.get(path as string);
 			if (!content) {
-				const error = new Error('File not found') as Error & { code: string };
+				const error: FileSystemErrorWithCode = new Error('File not found') as FileSystemErrorWithCode;
 				error.code = 'FileNotFound';
 				throw error;
 			}
@@ -29,9 +33,9 @@ jest.mock('vscode', () => {
 	return {
 		workspace: {
 			getConfiguration: jest.fn(() => ({
-				get: jest.fn((key: string, defaultValue: boolean) => {
+				get: jest.fn(<T>(key: string, defaultValue: T): T => {
 					if (key === 'autoSyncToAgentsMd') {
-						return mockConfig.autoSyncToAgentsMd;
+						return mockConfig.autoSyncToAgentsMd as T;
 					}
 					return defaultValue;
 				})
