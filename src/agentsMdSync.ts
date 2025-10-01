@@ -5,7 +5,7 @@ import { IMemoryStorage } from './types.js';
  * Manages synchronization of memory files to workspace's AGENTS.md file
  */
 export class AgentsMdSyncManager {
-	private isEnabled: boolean = false;
+	private isEnabled = false;
 
 	constructor() {
 		this.updateConfig();

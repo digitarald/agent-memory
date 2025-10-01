@@ -10,26 +10,26 @@ const mockFileContent = new Map<string, Uint8Array>();
 
 jest.mock('vscode', () => {
 	const mockFs = {
-		readFile: jest.fn(async (uri: any) => {
+		readFile: jest.fn(async (uri: { fsPath?: string; path?: string }) => {
 			const path = uri.fsPath || uri.path;
-			const content = mockFileContent.get(path);
+			const content = mockFileContent.get(path as string);
 			if (!content) {
-				const error: any = new Error('File not found');
+				const error = new Error('File not found') as Error & { code: string };
 				error.code = 'FileNotFound';
 				throw error;
 			}
 			return content;
 		}),
-		writeFile: jest.fn(async (uri: any, content: Uint8Array) => {
+		writeFile: jest.fn(async (uri: { fsPath?: string; path?: string }, content: Uint8Array) => {
 			const path = uri.fsPath || uri.path;
-			mockFileContent.set(path, content);
+			mockFileContent.set(path as string, content);
 		})
 	};
 
 	return {
 		workspace: {
 			getConfiguration: jest.fn(() => ({
-				get: jest.fn((key: string, defaultValue: any) => {
+				get: jest.fn((key: string, defaultValue: boolean) => {
 					if (key === 'autoSyncToAgentsMd') {
 						return mockConfig.autoSyncToAgentsMd;
 					}
@@ -39,7 +39,7 @@ jest.mock('vscode', () => {
 			fs: mockFs
 		},
 		Uri: {
-			joinPath: jest.fn((base: any, ...parts: string[]) => ({
+			joinPath: jest.fn((base: { fsPath?: string; path?: string }, ...parts: string[]) => ({
 				fsPath: [base.fsPath, ...parts].join('/'),
 				path: [base.path, ...parts].join('/')
 			}))
@@ -56,7 +56,7 @@ const mockFs = vscode.workspace.fs as jest.Mocked<typeof vscode.workspace.fs>;
 describe('AgentsMdSyncManager', () => {
 	let syncManager: AgentsMdSyncManager;
 	let mockStorage: jest.Mocked<IMemoryStorage>;
-	let mockWorkspaceFolder: any;
+	let mockWorkspaceFolder: { uri: { fsPath: string; path: string }; name: string };
 
 	beforeEach(() => {
 		// Reset mocks
