@@ -2,10 +2,10 @@ import * as vscode from 'vscode';
 import { IMemoryStorage } from './types.js';
 
 /**
- * Manages synchronization of memory files to workspace's AGENTS.md file
+ * Manages synchronization of memory files to a configured file in the workspace
  */
 export class AgentsMdSyncManager {
-	private isEnabled = false;
+	private syncFilePath = '';
 
 	constructor() {
 		this.updateConfig();
@@ -16,39 +16,42 @@ export class AgentsMdSyncManager {
 	 */
 	updateConfig(): void {
 		const config = vscode.workspace.getConfiguration('agentMemory');
-		this.isEnabled = config.get<boolean>('autoSyncToAgentsMd', false);
+		this.syncFilePath = config.get<string>('autoSyncToFile', '');
 	}
 
 	/**
 	 * Check if auto-sync is enabled
 	 */
 	isAutoSyncEnabled(): boolean {
-		return this.isEnabled;
+		return this.syncFilePath.length > 0;
 	}
 
 	/**
-	 * Sync memory files to AGENTS.md
+	 * Sync memory files to the configured file
 	 */
-	async syncToAgentsMd(storage: IMemoryStorage, workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
-		if (!this.isEnabled) {
+	async syncToFile(storage: IMemoryStorage, workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
+		if (!this.isAutoSyncEnabled()) {
 			return;
 		}
 
 		try {
-			const agentsMdUri = vscode.Uri.joinPath(workspaceFolder.uri, 'AGENTS.md');
+			const targetFileUri = vscode.Uri.joinPath(workspaceFolder.uri, this.syncFilePath);
 			const fs = vscode.workspace.fs;
 
 			// Get all memory files
 			const allFiles = await storage.listFiles();
 			const memoryFiles = allFiles.filter(f => !f.isDirectory);
 
-			// Generate memory section content
-			const memoryContent = await this.generateMemorySection(storage, memoryFiles);
+			// Check if target file is an .instructions.md file
+			const isInstructionsFile = this.syncFilePath.endsWith('.instructions.md');
 
-			// Read existing AGENTS.md or create new one
+			// Generate memory section content
+			const memoryContent = await this.generateMemorySection(storage, memoryFiles, isInstructionsFile);
+
+			// Read existing file or create new one
 			let existingContent = '';
 			try {
-				const fileContent = await fs.readFile(agentsMdUri);
+				const fileContent = await fs.readFile(targetFileUri);
 				existingContent = Buffer.from(fileContent).toString('utf8');
 			} catch (error) {
 				// File doesn't exist, will create new
@@ -60,11 +63,11 @@ export class AgentsMdSyncManager {
 			// Replace or append memory section
 			const updatedContent = this.updateMemorySection(existingContent, memoryContent);
 
-			// Write back to AGENTS.md
-			await fs.writeFile(agentsMdUri, Buffer.from(updatedContent, 'utf8'));
+			// Write back to target file
+			await fs.writeFile(targetFileUri, Buffer.from(updatedContent, 'utf8'));
 		} catch (error) {
 			// Log error but don't throw - sync failures shouldn't break memory operations
-			console.error('Failed to sync to AGENTS.md:', error);
+			console.error(`Failed to sync to ${this.syncFilePath}:`, error);
 		}
 	}
 
@@ -73,10 +76,18 @@ export class AgentsMdSyncManager {
 	 */
 	private async generateMemorySection(
 		storage: IMemoryStorage,
-		memoryFiles: Array<{ path: string; name: string; isDirectory: boolean }>
+		memoryFiles: Array<{ path: string; name: string; isDirectory: boolean }>,
+		isInstructionsFile: boolean
 	): Promise<string> {
+		let memorySection = '';
+
+		// Add frontmatter prefix for .instructions.md files
+		if (isInstructionsFile) {
+			memorySection = '---\napplyTo: **\n---\n\n';
+		}
+
 		if (memoryFiles.length === 0) {
-			return '<memories hint="Manage via memory tool">\n(No memory files yet)\n</memories>';
+			return memorySection + '<memories hint="Manage via memory tool">\n(No memory files yet)\n</memories>';
 		}
 
 		const fileSections: string[] = [];
@@ -89,11 +100,11 @@ export class AgentsMdSyncManager {
 				fileSections.push(`<memory path="${file.path}">\n${escapedContent}\n</memory>`);
 			} catch (error) {
 				// Skip files that can't be read
-				console.error(`Failed to read ${file.path} for AGENTS.md sync:`, error);
+				console.error(`Failed to read ${file.path} for sync:`, error);
 			}
 		}
 
-		return `<memories hint="Manage via memory tool">\n${fileSections.join('\n\n')}\n</memories>`;
+		return memorySection + `<memories hint="Manage via memory tool">\n${fileSections.join('\n\n')}\n</memories>`;
 	}
 
 	/**
