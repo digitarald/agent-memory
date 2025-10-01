@@ -108,7 +108,7 @@ export class AgentsMdSyncManager {
 	}
 
 	/**
-	 * Update or insert memory section in AGENTS.md content
+	 * Update or insert memory section in target file content
 	 */
 	private updateMemorySection(existingContent: string, memorySection: string): string {
 		// Look for existing memory section (support both old and new tag names)
