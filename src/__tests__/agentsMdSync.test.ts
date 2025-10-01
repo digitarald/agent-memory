@@ -3,7 +3,7 @@ import { IMemoryStorage, IMemoryFileInfo } from '../types';
 
 // Mock vscode module
 const mockConfig = {
-	autoSyncToAgentsMd: false
+	autoSyncToFile: ''
 };
 
 const mockFileContent = new Map<string, Uint8Array>();
@@ -34,8 +34,8 @@ jest.mock('vscode', () => {
 		workspace: {
 			getConfiguration: jest.fn(() => ({
 				get: jest.fn(<T>(key: string, defaultValue: T): T => {
-					if (key === 'autoSyncToAgentsMd') {
-						return mockConfig.autoSyncToAgentsMd as T;
+					if (key === 'autoSyncToFile') {
+						return mockConfig.autoSyncToFile as T;
 					}
 					return defaultValue;
 				})
@@ -64,7 +64,7 @@ describe('AgentsMdSyncManager', () => {
 
 	beforeEach(() => {
 		// Reset mocks
-		mockConfig.autoSyncToAgentsMd = false;
+		mockConfig.autoSyncToFile = '';
 		mockFileContent.clear();
 		jest.clearAllMocks();
 
@@ -99,31 +99,31 @@ describe('AgentsMdSyncManager', () => {
 			expect(syncManager.isAutoSyncEnabled()).toBe(false);
 		});
 
-		it('should return true when enabled in config', () => {
-			mockConfig.autoSyncToAgentsMd = true;
+		it('should return true when file path is configured', () => {
+			mockConfig.autoSyncToFile = 'AGENTS.md';
 			syncManager.updateConfig();
 			expect(syncManager.isAutoSyncEnabled()).toBe(true);
 		});
 	});
 
-	describe('syncToAgentsMd', () => {
+	describe('syncToFile', () => {
 		it('should not sync when disabled', async () => {
-			mockConfig.autoSyncToAgentsMd = false;
+			mockConfig.autoSyncToFile = '';
 			syncManager.updateConfig();
 
-			await syncManager.syncToAgentsMd(mockStorage, mockWorkspaceFolder);
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
 
 			expect(mockStorage.listFiles).not.toHaveBeenCalled();
 			expect(mockFs.writeFile).not.toHaveBeenCalled();
 		});
 
 		it('should create empty memory section when no files exist', async () => {
-			mockConfig.autoSyncToAgentsMd = true;
+			mockConfig.autoSyncToFile = 'AGENTS.md';
 			syncManager.updateConfig();
 
 			mockStorage.listFiles.mockResolvedValue([]);
 
-			await syncManager.syncToAgentsMd(mockStorage, mockWorkspaceFolder);
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
 
 			expect(mockStorage.listFiles).toHaveBeenCalled();
 			expect(mockFs.writeFile).toHaveBeenCalled();
@@ -136,7 +136,7 @@ describe('AgentsMdSyncManager', () => {
 		});
 
 		it('should create memory section with file contents', async () => {
-			mockConfig.autoSyncToAgentsMd = true;
+			mockConfig.autoSyncToFile = 'AGENTS.md';
 			syncManager.updateConfig();
 
 			const mockFiles: IMemoryFileInfo[] = [
@@ -153,7 +153,7 @@ describe('AgentsMdSyncManager', () => {
 			mockStorage.listFiles.mockResolvedValue(mockFiles);
 			mockStorage.readRaw.mockResolvedValue('Test content');
 
-			await syncManager.syncToAgentsMd(mockStorage, mockWorkspaceFolder);
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
 
 			expect(mockStorage.listFiles).toHaveBeenCalled();
 			expect(mockStorage.readRaw).toHaveBeenCalledWith('/memories/test.txt');
@@ -169,7 +169,7 @@ describe('AgentsMdSyncManager', () => {
 		});
 
 		it('should handle multiple files', async () => {
-			mockConfig.autoSyncToAgentsMd = true;
+			mockConfig.autoSyncToFile = 'AGENTS.md';
 			syncManager.updateConfig();
 
 			const mockFiles: IMemoryFileInfo[] = [
@@ -196,7 +196,7 @@ describe('AgentsMdSyncManager', () => {
 				return path === '/memories/file1.txt' ? 'Content 1' : 'Content 2';
 			});
 
-			await syncManager.syncToAgentsMd(mockStorage, mockWorkspaceFolder);
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
 
 			const writeCall = mockFs.writeFile.mock.calls[0];
 			const content = Buffer.from(writeCall[1]).toString('utf8');
@@ -207,7 +207,7 @@ describe('AgentsMdSyncManager', () => {
 		});
 
 		it('should replace existing memory section', async () => {
-			mockConfig.autoSyncToAgentsMd = true;
+			mockConfig.autoSyncToFile = 'AGENTS.md';
 			syncManager.updateConfig();
 
 			// Set up existing AGENTS.md content
@@ -237,7 +237,7 @@ More content`;
 			mockStorage.listFiles.mockResolvedValue(mockFiles);
 			mockStorage.readRaw.mockResolvedValue('New content');
 
-			await syncManager.syncToAgentsMd(mockStorage, mockWorkspaceFolder);
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
 
 			const writeCall = mockFs.writeFile.mock.calls[0];
 			const content = Buffer.from(writeCall[1]).toString('utf8');
@@ -257,7 +257,7 @@ More content`;
 		});
 
 		it('should skip directories in file list', async () => {
-			mockConfig.autoSyncToAgentsMd = true;
+			mockConfig.autoSyncToFile = 'AGENTS.md';
 			syncManager.updateConfig();
 
 			const mockFiles: IMemoryFileInfo[] = [
@@ -282,7 +282,7 @@ More content`;
 			mockStorage.listFiles.mockResolvedValue(mockFiles);
 			mockStorage.readRaw.mockResolvedValue('File content');
 
-			await syncManager.syncToAgentsMd(mockStorage, mockWorkspaceFolder);
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
 
 			// Should only read the file, not the directory
 			expect(mockStorage.readRaw).toHaveBeenCalledTimes(1);
@@ -295,17 +295,17 @@ More content`;
 		});
 
 		it('should handle sync errors gracefully', async () => {
-			mockConfig.autoSyncToAgentsMd = true;
+			mockConfig.autoSyncToFile = 'AGENTS.md';
 			syncManager.updateConfig();
 
 			mockStorage.listFiles.mockRejectedValue(new Error('Storage error'));
 
 			// Should not throw
-			await expect(syncManager.syncToAgentsMd(mockStorage, mockWorkspaceFolder)).resolves.not.toThrow();
+			await expect(syncManager.syncToFile(mockStorage, mockWorkspaceFolder)).resolves.not.toThrow();
 		});
 
 		it('should escape closing memory tags in content', async () => {
-			mockConfig.autoSyncToAgentsMd = true;
+			mockConfig.autoSyncToFile = 'AGENTS.md';
 			syncManager.updateConfig();
 
 			const mockFiles: IMemoryFileInfo[] = [
@@ -323,13 +323,71 @@ More content`;
 			// Content contains closing memory tag
 			mockStorage.readRaw.mockResolvedValue('Content with </memory> tag inside');
 
-			await syncManager.syncToAgentsMd(mockStorage, mockWorkspaceFolder);
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
 
 			const writeCall = mockFs.writeFile.mock.calls[0];
 			const content = Buffer.from(writeCall[1]).toString('utf8');
 			
 			// Should escape the closing tag in content
 			expect(content).toContain('Content with &lt;/memory&gt; tag inside');
+		});
+
+		it('should add frontmatter for .instructions.md files', async () => {
+			mockConfig.autoSyncToFile = '.github/copilot/memory.instructions.md';
+			syncManager.updateConfig();
+
+			const mockFiles: IMemoryFileInfo[] = [
+				{
+					path: '/memories/test.txt',
+					name: 'test.txt',
+					isDirectory: false,
+					size: 100,
+					lastAccessed: new Date(),
+					lastModified: new Date()
+				}
+			];
+
+			mockStorage.listFiles.mockResolvedValue(mockFiles);
+			mockStorage.readRaw.mockResolvedValue('Test content');
+
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
+
+			const writeCall = mockFs.writeFile.mock.calls[0];
+			const content = Buffer.from(writeCall[1]).toString('utf8');
+			
+			// Should have frontmatter prefix
+			expect(content).toContain('---\napplyTo: **\n---');
+			expect(content).toContain('<memories hint="Manage via memory tool">');
+			expect(content).toContain('<memory path="/memories/test.txt">');
+			expect(content).toContain('Test content');
+		});
+
+		it('should not add frontmatter for non-.instructions.md files', async () => {
+			mockConfig.autoSyncToFile = 'AGENTS.md';
+			syncManager.updateConfig();
+
+			const mockFiles: IMemoryFileInfo[] = [
+				{
+					path: '/memories/test.txt',
+					name: 'test.txt',
+					isDirectory: false,
+					size: 100,
+					lastAccessed: new Date(),
+					lastModified: new Date()
+				}
+			];
+
+			mockStorage.listFiles.mockResolvedValue(mockFiles);
+			mockStorage.readRaw.mockResolvedValue('Test content');
+
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
+
+			const writeCall = mockFs.writeFile.mock.calls[0];
+			const content = Buffer.from(writeCall[1]).toString('utf8');
+			
+			// Should NOT have frontmatter prefix
+			expect(content).not.toContain('---\napplyTo: **\n---');
+			expect(content).toContain('<memories hint="Manage via memory tool">');
 		});
 	});
 });

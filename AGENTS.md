@@ -46,7 +46,7 @@ Abstracted `IMemoryStorage` interface with three implementations:
   - `storage.test.ts`: Tests for both InMemory and Disk storage backends
   - `secretStorage.test.ts`: Secret storage with mocks
   - `activityLogger.test.ts`: Activity logging functionality
-  - `agentsMdSync.test.ts`: AGENTS.md auto-sync functionality
+  - `agentsMdSync.test.ts`: File auto-sync functionality
   - `pathValidation.test.ts`: Path security and validation
   - `utils.test.ts`: Text manipulation utilities
 - **Mocking**: Mock storage implementation in `mockStorage.ts` for testing
@@ -168,17 +168,19 @@ Register commands in `extension.ts` + declare in `package.json`:
 - `contributes.menus` - Context menu items
 - `contributes.views` - Tree view containers
 
-### AGENTS.md Auto-Sync
-The `AgentsMdSyncManager` class provides automatic synchronization of memory files to the workspace's AGENTS.md file:
+### File Auto-Sync
+The `AgentsMdSyncManager` class provides automatic synchronization of memory files to a configured file in the workspace:
 
 **Configuration:**
-- Controlled by `agentMemory.autoSyncToAgentsMd` setting (default: `false`)
+- Controlled by `agentMemory.autoSyncToFile` setting (default: `""` - disabled)
+- Setting accepts relative file path (e.g., `AGENTS.md` or `.github/copilot/memory.instructions.md`)
 - Config updates are detected via `onDidChangeConfiguration` event
 
 **Format:**
 - Memory section wrapped in `<memories hint="Manage via memory tool">...</memories>` tags
 - Each file wrapped in `<memory path="/memories/...">...</memory>` tags
-- Existing memory sections are replaced, other AGENTS.md content is preserved
+- For `.instructions.md` files, adds frontmatter prefix: `---\napplyTo: **\n---\n\n`
+- Existing memory sections are replaced, other file content is preserved
 - Empty memory shows `(No memory files yet)` placeholder
 
 **Trigger Points:**
@@ -190,7 +192,8 @@ The `AgentsMdSyncManager` class provides automatic synchronization of memory fil
 - Uses `storage.listFiles()` to get all memory files
 - Reads file content via `storage.readRaw()` (without line numbers)
 - Escapes `</memory>` tags in content to prevent XML parsing issues
-- Creates AGENTS.md if it doesn't exist
+- Creates target file if it doesn't exist
+- Detects `.instructions.md` files by file extension
 
 ## Dependencies
 - **Engine**: VS Code ^1.105.0 (for Tool APIs + Secret Storage `keys()`)
