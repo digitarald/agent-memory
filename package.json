@@ -203,6 +203,11 @@
 					],
 					"default": "memory",
 					"description": "Storage backend for memory files"
+				},
+				"agentMemory.autoSyncToAgentsMd": {
+					"type": "boolean",
+					"default": false,
+					"description": "Automatically sync all memory files to the workspace's AGENTS.md file as memory changes"
 				}
 			}
 		},
