@@ -3,7 +3,7 @@ import { MemoryTool } from './tools.js';
 
 /**
  * Content provider for readonly memory files
- * Provides content for memory:// URIs to display memory files as read-only
+ * Provides content for memory-readonly:// URIs to display memory files as read-only
  */
 export class ReadonlyMemoryProvider implements vscode.TextDocumentContentProvider {
 	private readonly scheme = 'memory-readonly';
