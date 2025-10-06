@@ -41,16 +41,18 @@ Choose between three storage options via settings (`agentMemory.storageBackend`)
 - Clear logs with one click
 - Visual indicators for successful vs failed operations
 
-### AGENTS.md Auto-Sync
+### File Auto-Sync
 
-When enabled via the `agentMemory.autoSyncToAgentsMd` setting, the extension automatically synchronizes all memory files to your workspace's `AGENTS.md` file. This provides a centralized, readable view of all agent memory in a format that's easy to review and version control.
+When configured via the `agentMemory.autoSyncToFile` setting, the extension automatically synchronizes all memory files to a specified file in your workspace (e.g., `AGENTS.md` or `.github/copilot/memory.instructions.md`). This provides a centralized, readable view of all agent memory in a format that's easy to review and version control.
 
 **Features:**
+- Specify any relative file path for syncing (e.g., `AGENTS.md`, `.github/copilot/memory.instructions.md`)
 - Memory content is wrapped in `<memories hint="Manage via memory tool">...</memories>` tags
 - Each file is enclosed in `<memory path="/memories/...">...</memory>` tags
 - Automatically updates when memory files are created, modified, or deleted
-- Preserves existing AGENTS.md content outside the memory section
-- If no AGENTS.md exists, one will be created automatically
+- Preserves existing file content outside the memory section
+- If the target file doesn't exist, one will be created automatically
+- For `.instructions.md` files, adds frontmatter with `applyTo: **` directive
 
 **Example AGENTS.md output:**
 ```markdown
@@ -64,6 +66,20 @@ When enabled via the `agentMemory.autoSyncToAgentsMd` setting, the extension aut
 
 <memory path="/memories/context.txt">
 Project is a VS Code extension for AI agent memory management.
+</memory>
+</memories>
+```
+
+**Example .instructions.md output:**
+```markdown
+---
+applyTo: **
+---
+
+<memories hint="Manage via memory tool">
+<memory path="/memories/preferences.txt">
+- Prefers TypeScript for new projects
+- Uses ESLint for code quality
 </memory>
 </memories>
 ```
@@ -96,7 +112,7 @@ Agent: I'll store that preference in memory.
 ### Settings
 
 - `agentMemory.storageBackend`: Choose between `memory` (default), `disk`, or `secret` storage
-- `agentMemory.autoSyncToAgentsMd`: Automatically sync all memory files to the workspace's AGENTS.md file as memory changes (default: `false`)
+- `agentMemory.autoSyncToFile`: Relative file path to automatically sync all memory files to (e.g., `AGENTS.md` or `.github/copilot/memory.instructions.md`). Leave empty to disable auto-sync. (default: `""` - disabled)
 
 ## Memory Tool API
 

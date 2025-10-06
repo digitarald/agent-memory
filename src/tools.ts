@@ -106,7 +106,7 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				result = `File created successfully: ${cleanPath(params.path)}`;
 				this.activityLogger.log('create', params.path, true, `Size: ${params.file_text.length} bytes`);
 				// Sync to AGENTS.md if enabled
-				await this.syncManager.syncToAgentsMd(storage, workspaceFolder);
+				await this.syncManager.syncToFile(storage, workspaceFolder);
 				break;
 			}
 
@@ -115,7 +115,7 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				result = `String replaced successfully in ${cleanPath(params.path)}`;
 				this.activityLogger.log('str_replace', params.path, true);
 				// Sync to AGENTS.md if enabled
-				await this.syncManager.syncToAgentsMd(storage, workspaceFolder);
+				await this.syncManager.syncToFile(storage, workspaceFolder);
 				break;
 			}
 
@@ -124,7 +124,7 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				result = `Text inserted successfully at line ${params.insert_line} in ${cleanPath(params.path)}`;
 				this.activityLogger.log('insert', params.path, true, `Line: ${params.insert_line}`);
 				// Sync to AGENTS.md if enabled
-				await this.syncManager.syncToAgentsMd(storage, workspaceFolder);
+				await this.syncManager.syncToFile(storage, workspaceFolder);
 				break;
 			}
 
@@ -132,7 +132,7 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				result = await storage.delete(params.path);
 				this.activityLogger.log('delete', params.path, true);
 				// Sync to AGENTS.md if enabled
-				await this.syncManager.syncToAgentsMd(storage, workspaceFolder);
+				await this.syncManager.syncToFile(storage, workspaceFolder);
 				break;
 			}
 
@@ -141,7 +141,7 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				result = `Renamed successfully: ${cleanPath(params.old_path)} → ${cleanPath(params.new_path)}`;
 				this.activityLogger.log('rename', params.old_path, true, `New path: ${params.new_path}`);
 				// Sync to AGENTS.md if enabled
-				await this.syncManager.syncToAgentsMd(storage, workspaceFolder);
+				await this.syncManager.syncToFile(storage, workspaceFolder);
 				break;
 			}
 
@@ -279,7 +279,7 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 		}
 
 		// Sync to AGENTS.md if enabled
-		await this.syncManager.syncToAgentsMd(storage, workspaceFolders[0]);
+		await this.syncManager.syncToFile(storage, workspaceFolders[0]);
 	}
 
 	/**
@@ -296,7 +296,7 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 			await storage.delete(filePath);
 			this.activityLogger.log('delete', filePath, true);
 			// Sync to AGENTS.md if enabled
-			await this.syncManager.syncToAgentsMd(storage, workspaceFolders[0]);
+			await this.syncManager.syncToFile(storage, workspaceFolders[0]);
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.activityLogger.log('delete', filePath, false, errorMsg);
