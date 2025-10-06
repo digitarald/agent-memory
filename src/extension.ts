@@ -3,6 +3,7 @@ import { registerMemoryTool } from './tools.js';
 import { MemoryActivityLogger } from './activityLogger.js';
 import { MemoryFilesProvider, ActivityLogProvider } from './views.js';
 import { formatSize } from './lib/utils.js';
+import { ReadonlyMemoryProvider } from './readonlyProvider.js';
 
 export function activate(context: vscode.ExtensionContext) {
 	// Initialize activity logger
@@ -11,6 +12,10 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Register memory tool
 	const memoryTool = registerMemoryTool(context, activityLogger);
+
+	// Register readonly memory provider
+	const readonlyProvider = new ReadonlyMemoryProvider(memoryTool);
+	context.subscriptions.push(readonlyProvider.register(context));
 
 	// Register tree view providers
 	const memoryFilesProvider = new MemoryFilesProvider(memoryTool, activityLogger);
@@ -95,21 +100,10 @@ export function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			// For in-memory storage, we need to create a virtual document
-			const workspaceFolders = vscode.workspace.workspaceFolders;
-			if (!workspaceFolders || workspaceFolders.length === 0) {
-				return;
-			}
-
-		const storage = memoryTool.getStorageForWorkspace(workspaceFolders[0]);
-		const content = await storage.readRaw(fileInfo.path);
-
-		// Create and show a new untitled document with the content
-			const doc = await vscode.workspace.openTextDocument({
-				content,
-				language: 'plaintext'
-			});
-			await vscode.window.showTextDocument(doc);
+			// Open file using readonly provider
+			const uri = readonlyProvider.createUri(fileInfo.path);
+			const doc = await vscode.workspace.openTextDocument(uri);
+			await vscode.window.showTextDocument(doc, { preview: false });
 		})
 	);
 
