@@ -41,10 +41,16 @@ jobs:
           COMMIT_COUNT=$(git rev-list --count HEAD)
           # Get short commit SHA
           SHORT_SHA=$(git rev-parse --short HEAD)
-          # Create pre-release version: x.y.z-pre.COMMIT_COUNT+SHORT_SHA
-          PRE_VERSION="${CURRENT_VERSION}-pre.${COMMIT_COUNT}+${SHORT_SHA}"
+
+          # For VS Marketplace pre-releases, we use patch version increments
+          # Parse version: x.y.z -> increment patch to x.y.(z+COMMIT_COUNT)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          NEW_PATCH=$((PATCH + COMMIT_COUNT))
+          PRE_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+
           echo "version=${PRE_VERSION}" >> $GITHUB_OUTPUT
-          echo "Pre-release version: ${PRE_VERSION}"
+          echo "commit_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "Pre-release version: ${PRE_VERSION} (commit: ${SHORT_SHA})"
 
       - name: Update package.json version
         run: |
@@ -61,6 +67,6 @@ jobs:
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:
-          name: prerelease-vsix-${{ steps.version.outputs.version }}
+          name: prerelease-vsix-${{ steps.version.outputs.version }}-${{ steps.version.outputs.commit_sha }}
           path: '*.vsix'
           retention-days: 14
