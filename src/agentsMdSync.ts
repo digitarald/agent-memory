@@ -6,8 +6,8 @@ import { IMemoryStorage } from './types.js';
  */
 export class AgentsMdSyncManager {
 	private syncFilePath = '';
-	private readonly frontmatterPrefix = '---\napplyTo: **\n---\n\n';
-	private readonly frontmatterRegex = /^---\napplyTo: \*\*\n---\n\n/;
+	private readonly frontmatterPrefix = '---\napplyTo: \'**\'\n---\n\n';
+	private readonly frontmatterRegex = /^---\napplyTo: '\*\*'\n---\n\n/;
 
 	constructor() {
 		this.updateConfig();

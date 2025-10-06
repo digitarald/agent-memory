@@ -356,7 +356,7 @@ More content`;
 			const content = Buffer.from(writeCall[1]).toString('utf8');
 			
 			// Should have frontmatter prefix
-			expect(content).toContain('---\napplyTo: **\n---');
+			expect(content).toContain('---\napplyTo: \'**\'\n---');
 			expect(content).toContain('<memories hint="Manage via memory tool">');
 			expect(content).toContain('<memory path="/memories/test.txt">');
 			expect(content).toContain('Test content');
@@ -386,7 +386,7 @@ More content`;
 			const content = Buffer.from(writeCall[1]).toString('utf8');
 			
 			// Should NOT have frontmatter prefix
-			expect(content).not.toContain('---\napplyTo: **\n---');
+			expect(content).not.toContain('---\napplyTo: \'**\'\n---');
 			expect(content).toContain('<memories hint="Manage via memory tool">');
 		});
 
@@ -415,7 +415,7 @@ More content`;
 			const content1 = Buffer.from(writeCall1[1]).toString('utf8');
 			
 			// Should have frontmatter prefix once
-			const frontmatterCount1 = (content1.match(/---\napplyTo: \*\*\n---/g) || []).length;
+			const frontmatterCount1 = (content1.match(/---\napplyTo: '\*\*'\n---/g) || []).length;
 			expect(frontmatterCount1).toBe(1);
 
 			// Second sync - simulating a subsequent update
@@ -425,7 +425,7 @@ More content`;
 			const content2 = Buffer.from(writeCall2[1]).toString('utf8');
 			
 			// Should still have frontmatter prefix only once, not duplicated
-			const frontmatterCount2 = (content2.match(/---\napplyTo: \*\*\n---/g) || []).length;
+			const frontmatterCount2 = (content2.match(/---\napplyTo: '\*\*'\n---/g) || []).length;
 			expect(frontmatterCount2).toBe(1);
 
 			// Third sync - to be extra sure
@@ -435,7 +435,7 @@ More content`;
 			const content3 = Buffer.from(writeCall3[1]).toString('utf8');
 			
 			// Should still have frontmatter prefix only once
-			const frontmatterCount3 = (content3.match(/---\napplyTo: \*\*\n---/g) || []).length;
+			const frontmatterCount3 = (content3.match(/---\napplyTo: '\*\*'\n---/g) || []).length;
 			expect(frontmatterCount3).toBe(1);
 		});
 
@@ -464,7 +464,7 @@ More content`;
 			const content1 = Buffer.from(writeCall1[1]).toString('utf8');
 			
 			// Should NOT have frontmatter
-			expect(content1).not.toContain('---\napplyTo: **\n---');
+			expect(content1).not.toContain('---\napplyTo: \'**\'\n---');
 			expect(content1).toContain('<memories hint="Manage via memory tool">');
 
 			// Now switch to .instructions.md file
@@ -477,7 +477,7 @@ More content`;
 			const content2 = Buffer.from(writeCall2[1]).toString('utf8');
 			
 			// Should now have frontmatter (once)
-			const frontmatterCount = (content2.match(/---\napplyTo: \*\*\n---/g) || []).length;
+			const frontmatterCount = (content2.match(/---\napplyTo: '\*\*'\n---/g) || []).length;
 			expect(frontmatterCount).toBe(1);
 			expect(content2).toContain('<memories hint="Manage via memory tool">');
 		});
