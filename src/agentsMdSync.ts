@@ -6,6 +6,8 @@ import { IMemoryStorage } from './types.js';
  */
 export class AgentsMdSyncManager {
 	private syncFilePath = '';
+	private readonly frontmatterPrefix = '---\napplyTo: **\n---\n\n';
+	private readonly frontmatterRegex = /^---\napplyTo: \*\*\n---\n\n/;
 
 	constructor() {
 		this.updateConfig();
@@ -83,7 +85,7 @@ export class AgentsMdSyncManager {
 
 		// Add frontmatter prefix for .instructions.md files
 		if (isInstructionsFile) {
-			memorySection = '---\napplyTo: **\n---\n\n';
+			memorySection = this.frontmatterPrefix;
 		}
 
 		if (memoryFiles.length === 0) {
@@ -116,14 +118,14 @@ export class AgentsMdSyncManager {
 		const memoryRegex = /<memory\s+hint="Manage via memory tool">[\s\S]*?<\/memory>/;
 		
 		// Check if memorySection starts with frontmatter
-		const hasFrontmatter = memorySection.startsWith('---\napplyTo: **\n---\n\n');
+		const hasFrontmatter = memorySection.startsWith(this.frontmatterPrefix);
 		
 		if (memoriesRegex.test(existingContent)) {
 			// If we're adding frontmatter, strip any existing frontmatter from the beginning
 			let contentToUpdate = existingContent;
 			if (hasFrontmatter) {
 				// Remove frontmatter from the beginning of existing content
-				contentToUpdate = contentToUpdate.replace(/^---\napplyTo: \*\*\n---\n\n/, '');
+				contentToUpdate = contentToUpdate.replace(this.frontmatterRegex, '');
 			}
 			// Replace existing section with new tag name
 			return contentToUpdate.replace(memoriesRegex, memorySection);
@@ -132,7 +134,7 @@ export class AgentsMdSyncManager {
 			let contentToUpdate = existingContent;
 			if (hasFrontmatter) {
 				// Remove frontmatter from the beginning of existing content
-				contentToUpdate = contentToUpdate.replace(/^---\napplyTo: \*\*\n---\n\n/, '');
+				contentToUpdate = contentToUpdate.replace(this.frontmatterRegex, '');
 			}
 			// Replace old tag name with new tag name
 			return contentToUpdate.replace(memoryRegex, memorySection);
