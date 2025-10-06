@@ -100,10 +100,10 @@ export function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			// Open file using readonly provider
+			// Open file using readonly provider in markdown preview mode
 			const uri = readonlyProvider.createUri(fileInfo.path);
 			const doc = await vscode.workspace.openTextDocument(uri);
-			await vscode.window.showTextDocument(doc, { preview: false });
+			await vscode.window.showTextDocument(doc, { preview: true });
 		})
 	);
 

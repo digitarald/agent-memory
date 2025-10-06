@@ -40,8 +40,9 @@ export class ReadonlyMemoryProvider implements vscode.TextDocumentContentProvide
 
 	/**
 	 * Create a URI for a memory file
+	 * Adds .md extension to ensure files open as markdown
 	 */
 	createUri(memoryPath: string): vscode.Uri {
-		return vscode.Uri.parse(`${this.scheme}:${memoryPath}`);
+		return vscode.Uri.parse(`${this.scheme}:${memoryPath}.md`);
 	}
 }
