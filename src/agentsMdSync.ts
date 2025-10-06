@@ -6,6 +6,8 @@ import { IMemoryStorage } from './types.js';
  */
 export class AgentsMdSyncManager {
 	private syncFilePath = '';
+	private readonly frontmatterPrefix = '---\napplyTo: \'**\'\n---\n\n';
+	private readonly frontmatterRegex = /^---\napplyTo: '\*\*'\n---\n\n/;
 
 	constructor() {
 		this.updateConfig();
@@ -83,7 +85,7 @@ export class AgentsMdSyncManager {
 
 		// Add frontmatter prefix for .instructions.md files
 		if (isInstructionsFile) {
-			memorySection = '---\napplyTo: **\n---\n\n';
+			memorySection = this.frontmatterPrefix;
 		}
 
 		if (memoryFiles.length === 0) {
@@ -115,12 +117,27 @@ export class AgentsMdSyncManager {
 		const memoriesRegex = /<memories\s+hint="Manage via memory tool">[\s\S]*?<\/memories>/;
 		const memoryRegex = /<memory\s+hint="Manage via memory tool">[\s\S]*?<\/memory>/;
 		
+		// Check if memorySection starts with frontmatter
+		const hasFrontmatter = memorySection.startsWith(this.frontmatterPrefix);
+		
 		if (memoriesRegex.test(existingContent)) {
+			// If we're adding frontmatter, strip any existing frontmatter from the beginning
+			let contentToUpdate = existingContent;
+			if (hasFrontmatter) {
+				// Remove frontmatter from the beginning of existing content
+				contentToUpdate = contentToUpdate.replace(this.frontmatterRegex, '');
+			}
 			// Replace existing section with new tag name
-			return existingContent.replace(memoriesRegex, memorySection);
+			return contentToUpdate.replace(memoriesRegex, memorySection);
 		} else if (memoryRegex.test(existingContent)) {
+			// If we're adding frontmatter, strip any existing frontmatter from the beginning
+			let contentToUpdate = existingContent;
+			if (hasFrontmatter) {
+				// Remove frontmatter from the beginning of existing content
+				contentToUpdate = contentToUpdate.replace(this.frontmatterRegex, '');
+			}
 			// Replace old tag name with new tag name
-			return existingContent.replace(memoryRegex, memorySection);
+			return contentToUpdate.replace(memoryRegex, memorySection);
 		} else {
 			// Append to end of file with proper spacing
 			const separator = existingContent.length > 0 && !existingContent.endsWith('\n\n') 

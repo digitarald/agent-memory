@@ -356,7 +356,7 @@ More content`;
 			const content = Buffer.from(writeCall[1]).toString('utf8');
 			
 			// Should have frontmatter prefix
-			expect(content).toContain('---\napplyTo: **\n---');
+			expect(content).toContain('---\napplyTo: \'**\'\n---');
 			expect(content).toContain('<memories hint="Manage via memory tool">');
 			expect(content).toContain('<memory path="/memories/test.txt">');
 			expect(content).toContain('Test content');
@@ -386,8 +386,100 @@ More content`;
 			const content = Buffer.from(writeCall[1]).toString('utf8');
 			
 			// Should NOT have frontmatter prefix
-			expect(content).not.toContain('---\napplyTo: **\n---');
+			expect(content).not.toContain('---\napplyTo: \'**\'\n---');
 			expect(content).toContain('<memories hint="Manage via memory tool">');
+		});
+
+		it('should not duplicate frontmatter when syncing multiple times to .instructions.md', async () => {
+			mockConfig.autoSyncToFile = '.github/copilot/memory.instructions.md';
+			syncManager.updateConfig();
+
+			const mockFiles: IMemoryFileInfo[] = [
+				{
+					path: '/memories/test.txt',
+					name: 'test.txt',
+					isDirectory: false,
+					size: 100,
+					lastAccessed: new Date(),
+					lastModified: new Date()
+				}
+			];
+
+			mockStorage.listFiles.mockResolvedValue(mockFiles);
+			mockStorage.readRaw.mockResolvedValue('Test content');
+
+			// First sync
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
+
+			const writeCall1 = mockFs.writeFile.mock.calls[0];
+			const content1 = Buffer.from(writeCall1[1]).toString('utf8');
+			
+			// Should have frontmatter prefix once
+			const frontmatterCount1 = (content1.match(/---\napplyTo: '\*\*'\n---/g) || []).length;
+			expect(frontmatterCount1).toBe(1);
+
+			// Second sync - simulating a subsequent update
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
+
+			const writeCall2 = mockFs.writeFile.mock.calls[1];
+			const content2 = Buffer.from(writeCall2[1]).toString('utf8');
+			
+			// Should still have frontmatter prefix only once, not duplicated
+			const frontmatterCount2 = (content2.match(/---\napplyTo: '\*\*'\n---/g) || []).length;
+			expect(frontmatterCount2).toBe(1);
+
+			// Third sync - to be extra sure
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
+
+			const writeCall3 = mockFs.writeFile.mock.calls[2];
+			const content3 = Buffer.from(writeCall3[1]).toString('utf8');
+			
+			// Should still have frontmatter prefix only once
+			const frontmatterCount3 = (content3.match(/---\napplyTo: '\*\*'\n---/g) || []).length;
+			expect(frontmatterCount3).toBe(1);
+		});
+
+		it('should add frontmatter when switching from non-.instructions.md to .instructions.md file', async () => {
+			// First sync to AGENTS.md (no frontmatter)
+			mockConfig.autoSyncToFile = 'AGENTS.md';
+			syncManager.updateConfig();
+
+			const mockFiles: IMemoryFileInfo[] = [
+				{
+					path: '/memories/test.txt',
+					name: 'test.txt',
+					isDirectory: false,
+					size: 100,
+					lastAccessed: new Date(),
+					lastModified: new Date()
+				}
+			];
+
+			mockStorage.listFiles.mockResolvedValue(mockFiles);
+			mockStorage.readRaw.mockResolvedValue('Test content');
+
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
+
+			const writeCall1 = mockFs.writeFile.mock.calls[0];
+			const content1 = Buffer.from(writeCall1[1]).toString('utf8');
+			
+			// Should NOT have frontmatter
+			expect(content1).not.toContain('---\napplyTo: \'**\'\n---');
+			expect(content1).toContain('<memories hint="Manage via memory tool">');
+
+			// Now switch to .instructions.md file
+			mockConfig.autoSyncToFile = '.github/copilot/memory.instructions.md';
+			syncManager.updateConfig();
+
+			await syncManager.syncToFile(mockStorage, mockWorkspaceFolder);
+
+			const writeCall2 = mockFs.writeFile.mock.calls[1];
+			const content2 = Buffer.from(writeCall2[1]).toString('utf8');
+			
+			// Should now have frontmatter (once)
+			const frontmatterCount = (content2.match(/---\napplyTo: '\*\*'\n---/g) || []).length;
+			expect(frontmatterCount).toBe(1);
+			expect(content2).toContain('<memories hint="Manage via memory tool">');
 		});
 	});
 });
