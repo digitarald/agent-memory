@@ -60,7 +60,7 @@ jobs:
         run: npx @vscode/vsce package --pre-release
 
       - name: Publish pre-release to VS Code Marketplace
-        run: npx @vscode/vsce publish --pre-release -p ${{ secrets.VSCE_PAT }}
+        run: npx @vscode/vsce publish --pre-release --allow-proposed-apis chatParticipantPrivate -p ${{ secrets.VSCE_PAT }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
