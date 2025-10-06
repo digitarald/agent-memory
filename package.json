@@ -16,8 +16,42 @@
 		"AI",
 		"Chat"
 	],
+	"enabledApiProposals": [
+		"chatParticipantPrivate"
+	],
 	"activationEvents": [],
 	"contributes": {
+		"chatModes": [
+			{
+				"name": "memory-manager",
+				"description": "Memory Management Mode - Triage and update memory files to reflect codebase reality",
+				"path": "./prompts/memory-manager.chatmode.md"
+			}
+		],
+		"chatPromptFiles": [
+			{
+				"name": "remember",
+				"description": "Remember decisions and learnings from the conversation",
+				"path": "./prompts/remember.prompt.md"
+			},
+			{
+				"name": "memory-summarize",
+				"description": "Summarize current memory files",
+				"path": "./prompts/memory-summarize.prompt.md"
+			},
+			{
+				"name": "memory-compress",
+				"description": "Compress and optimize memory files",
+				"path": "./prompts/memory-compress.prompt.md"
+			}
+		],
+		"chatInstructions": [
+			{
+				"name": "memory-usage",
+				"description": "Instructions for using memory tool effectively",
+				"path": "./prompts/memory-usage.instructions.md"
+			}
+		],
 		"languageModelTools": [
 			{
 				"name": "memory",

@@ -16,6 +16,13 @@ Single comprehensive tool registered as `memory` supporting 6 commands:
 
 Tool registration: `vscode.lm.registerTool()` + declaration in `package.json` under `contributes.languageModelTools`
 
+### Contributed Chat Features
+Uses `chatParticipantPrivate` API to contribute:
+- **Chat Mode** (`memory-manager`): Triage/update memory to reflect codebase reality
+- **Prompts**: `memory-summarize` (overview), `memory-compress` (optimize/consolidate)
+- **Instructions** (`memory-usage`): Global guidance (`applyTo: **`) for memory tool usage
+- All files in `prompts/` directory
+
 ### Core Components
 - **MemoryTool** (`tools.ts`): Main tool implementation supporting 6 commands (view, create, str_replace, insert, delete, rename)
 - **Storage Layer** (`storage.ts`): Abstracted storage interface with three backends:
@@ -58,6 +65,21 @@ Abstracted `IMemoryStorage` interface with three implementations:
 3. Register in `registerMemoryTool()` via `vscode.lm.registerTool(name, instance)`
 4. Declare in `package.json` under `contributes.languageModelTools` with schema and metadata
 5. Tools are auto-discovered by participants using `vscode.lm.tools` API
+
+### Adding Chat Contributions
+1. **Chat Modes**: Create `.chatmode.md` file in `prompts/` directory
+   - Include frontmatter with `description` and `tools` array
+   - Define mode-specific behavior and instructions
+   - Register in `package.json` under `contributes.chatModes`
+2. **Prompt Files**: Create `.prompt.md` file in `prompts/` directory
+   - Include frontmatter with `mode: agent` (or other modes)
+   - Define the prompt template
+   - Register in `package.json` under `contributes.chatPromptFiles`
+3. **Instructions**: Create `.instructions.md` file in `prompts/` directory
+   - Include frontmatter with `description` and `applyTo` pattern (e.g., `**` for all files)
+   - Define global instructions for agents
+   - Register in `package.json` under `contributes.chatInstructions`
+4. **Enable API**: Add `"chatParticipantPrivate"` to `enabledApiProposals` in `package.json`
 
 ### Adding UI Components
 1. **Tree Views**: Registered in `package.json` under `contributes.views.explorer`
