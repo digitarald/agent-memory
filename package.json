@@ -226,16 +226,18 @@
 				"agentMemory.storageBackend": {
 					"type": "string",
 					"enum": [
-						"memory",
+						"workspace-state",
+						"branch-state",
 						"disk",
 						"secret"
 					],
 					"enumDescriptions": [
-						"Store memory files in-memory (per workspace, ephemeral)",
+						"Store memory files in workspace state (per workspace, persistent across VS Code sessions)",
+						"Store memory files per workspace and git branch (persistent, isolated by branch)",
 						"Store memory files in .vscode/memory directory (persistent)",
 						"Store memory files encrypted in VS Code's secret storage (secure, persistent)"
 					],
-					"default": "memory",
+					"default": "workspace-state",
 					"description": "Storage backend for memory files"
 				},
 				"agentMemory.autoSyncToFile": {
@@ -246,6 +248,17 @@
 						"AGENTS.md",
 						".github/copilot/memory.instructions.md"
 					]
+				},
+				"agentMemory.tldr.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Automatically generate TL;DR summaries for memory files using AI"
+				},
+				"agentMemory.tldr.minWordCount": {
+					"type": "number",
+					"default": 100,
+					"minimum": 0,
+					"description": "Minimum word count to generate a TL;DR summary"
 				}
 			}
 		},

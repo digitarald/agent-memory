@@ -1,16 +1,17 @@
 import * as vscode from 'vscode';
 import { IMemoryParameters, IMemoryStorage } from './types.js';
-import { InMemoryStorage, DiskMemoryStorage, SecretMemoryStorage } from './storage.js';
+import { WorkspaceStateStorage, BranchStateStorage, DiskMemoryStorage, SecretMemoryStorage } from './storage.js';
 import { MemoryActivityLogger } from './activityLogger.js';
 import { PinManager } from './pinManager.js';
 import { AgentsMdSyncManager } from './agentsMdSync.js';
+import { TldrService } from './tldrService.js';
 
 /**
  * Gets the configured storage backend for a workspace
  */
-function getStorageBackend(_workspaceFolder: vscode.WorkspaceFolder): 'memory' | 'disk' | 'secret' {
+function getStorageBackend(_workspaceFolder: vscode.WorkspaceFolder): 'workspace-state' | 'branch-state' | 'disk' | 'secret' {
 	const config = vscode.workspace.getConfiguration('agentMemory');
-	return config.get<'memory' | 'disk' | 'secret'>('storageBackend', 'memory');
+	return config.get<'workspace-state' | 'branch-state' | 'disk' | 'secret'>('storageBackend', 'workspace-state');
 }
 
 /**
@@ -47,8 +48,10 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				storage = new DiskMemoryStorage(workspaceFolder);
 			} else if (backend === 'secret') {
 				storage = new SecretMemoryStorage(this.context, workspaceFolder);
+			} else if (backend === 'branch-state') {
+				storage = new BranchStateStorage(this.context, workspaceFolder);
 			} else {
-				storage = new InMemoryStorage(workspaceFolder);
+				storage = new WorkspaceStateStorage(this.context, workspaceFolder);
 			}
 
 			// Create and associate PIN manager
@@ -105,6 +108,10 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				await storage.create(params.path, params.file_text);
 				result = `File created successfully: ${cleanPath(params.path)}`;
 				this.activityLogger.log('create', params.path, true, `Size: ${params.file_text.length} bytes`);
+
+				// Generate TL;DR asynchronously
+				this.generateTldrAsync(storage, params.path, params.file_text);
+
 				// Sync to AGENTS.md if enabled
 				await this.syncManager.syncToFile(storage, workspaceFolder);
 				break;
@@ -114,6 +121,10 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				await storage.strReplace(params.path, params.old_str, params.new_str);
 				result = `String replaced successfully in ${cleanPath(params.path)}`;
 				this.activityLogger.log('str_replace', params.path, true);
+
+				// Regenerate TL;DR asynchronously
+				this.regenerateTldrAsync(storage, params.path);
+
 				// Sync to AGENTS.md if enabled
 				await this.syncManager.syncToFile(storage, workspaceFolder);
 				break;
@@ -123,6 +134,10 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 				await storage.insert(params.path, params.insert_line, params.insert_text);
 				result = `Text inserted successfully at line ${params.insert_line} in ${cleanPath(params.path)}`;
 				this.activityLogger.log('insert', params.path, true, `Line: ${params.insert_line}`);
+
+				// Regenerate TL;DR asynchronously
+				this.regenerateTldrAsync(storage, params.path);
+
 				// Sync to AGENTS.md if enabled
 				await this.syncManager.syncToFile(storage, workspaceFolder);
 				break;
@@ -193,38 +208,38 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 		switch (params.command) {
 			case 'view': {
 				const path = cleanPath(params.path);
-				message = `Reading ${path}`;
+				message = `🧠 Read ${path}`;
 				confirmationMessage = `View contents of \`${path}\`?`;
 				break;
 			}
 			case 'create': {
 				const path = cleanPath(params.path);
-				message = `Creating file ${path}`;
+				message = `🧠 Create ${path}`;
 				confirmationMessage = `Create or overwrite file \`${path}\`?`;
 				break;
 			}
 			case 'str_replace': {
 				const path = cleanPath(params.path);
-				message = `Replacing text in ${path}`;
+				message = `🧠 Edit ${path}`;
 				confirmationMessage = `Replace text in \`${path}\`?`;
 				break;
 			}
 			case 'insert': {
 				const path = cleanPath(params.path);
-				message = `Inserting text at line ${params.insert_line} in ${path}`;
+				message = `🧠 Edit ${path}`;
 				confirmationMessage = `Insert text at line ${params.insert_line} in \`${path}\`?`;
 				break;
 			}
 			case 'delete': {
 				const path = cleanPath(params.path);
-				message = `Deleting ${path}`;
+				message = `🧠 Delete ${path}`;
 				confirmationMessage = `Delete \`${path}\`?`;
 				break;
 			}
 			case 'rename': {
 				const oldPath = cleanPath(params.old_path);
 				const newPath = cleanPath(params.new_path);
-				message = `Renaming ${oldPath} to ${newPath}`;
+				message = `🧠 Rename ${oldPath} to ${newPath}`;
 				confirmationMessage = `Rename \`${oldPath}\` to \`${newPath}\`?`;
 				break;
 			}
@@ -252,6 +267,49 @@ export class MemoryTool implements vscode.LanguageModelTool<IMemoryParameters> {
 	clearStorageCache(): void {
 		this.storageMap.clear();
 		this.pinManagerMap.clear();
+	}
+
+	/**
+	 * Generate TL;DR for a file asynchronously (fire and forget)
+	 * This does NOT block memory write operations
+	 */
+	private generateTldrAsync(storage: IMemoryStorage, filePath: string, content: string): void {
+		// Run asynchronously without blocking - intentionally not awaited
+		void (async () => {
+			try {
+				const tldr = await TldrService.generateTldr(content, filePath);
+				if (tldr) {
+					await storage.setTldr(filePath, tldr);
+				}
+			} catch (error) {
+				// Log errors but don't throw - TL;DR failures should never break memory operations
+				console.error(`[MemoryTool] Failed to generate/store TL;DR for ${filePath}:`, error);
+			}
+		})();
+	}
+
+	/**
+	 * Regenerate TL;DR for an existing file asynchronously (fire and forget)
+	 * This does NOT block memory write operations
+	 */
+	private regenerateTldrAsync(storage: IMemoryStorage, filePath: string): void {
+		// Run asynchronously without blocking - intentionally not awaited
+		void (async () => {
+			try {
+				const content = await storage.readRaw(filePath);
+				const tldr = await TldrService.generateTldr(content, filePath);
+
+				if (tldr) {
+					await storage.setTldr(filePath, tldr);
+				} else {
+					// If TL;DR shouldn't be generated (e.g., file too small), delete existing TL;DR
+					await storage.deleteTldr(filePath);
+				}
+			} catch (error) {
+				// Log errors but don't throw - TL;DR failures should never break memory operations
+				console.error(`[MemoryTool] Failed to regenerate TL;DR for ${filePath}:`, error);
+			}
+		})();
 	}
 
 	/**

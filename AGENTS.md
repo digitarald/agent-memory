@@ -25,8 +25,9 @@ Uses `chatParticipantPrivate` API to contribute:
 
 ### Core Components
 - **MemoryTool** (`tools.ts`): Main tool implementation supporting 6 commands (view, create, str_replace, insert, delete, rename)
-- **Storage Layer** (`storage.ts`): Abstracted storage interface with three backends:
-  - `InMemoryStorage`: Ephemeral storage using VS Code's `memfs://` scheme (workspace-scoped)
+- **Storage Layer** (`storage.ts`): Abstracted storage interface with four backends:
+  - `WorkspaceStateStorage`: Persistent storage using VS Code workspace state (workspace-scoped)
+  - `BranchStateStorage`: Persistent storage scoped to workspace and git branch
   - `DiskMemoryStorage`: Persistent storage in `.vscode/memory` directory
   - `SecretMemoryStorage`: Encrypted storage via VS Code Secret Storage API
 - **Activity Logger** (`activityLogger.ts`): Tracks all memory operations with metadata and timestamps
@@ -36,8 +37,9 @@ Uses `chatParticipantPrivate` API to contribute:
 - **Text Utils** (`lib/utils.ts`): Text manipulation utilities for string replacement and insertion
 
 ### Storage Backends (`storage.ts`)
-Abstracted `IMemoryStorage` interface with three implementations:
-- **InMemoryStorage**: Ephemeral Map-based storage (workspace-scoped)
+Abstracted `IMemoryStorage` interface with four implementations:
+- **WorkspaceStateStorage**: Persistent storage using VS Code Memento API (workspace-scoped)
+- **BranchStateStorage**: Persistent storage scoped by workspace and git branch (workspace + branch scoped)
 - **DiskMemoryStorage**: Persistent storage in `.vscode/memory/`
 - **SecretMemoryStorage**: Encrypted storage via VS Code Secret Storage API (uses `keys()` method from VS Code 1.100+)
 

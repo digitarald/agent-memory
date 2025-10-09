@@ -7,7 +7,7 @@ import { MemoryTool } from './tools.js';
  */
 export class ReadonlyMemoryProvider implements vscode.TextDocumentContentProvider {
 	private readonly scheme = 'memory-readonly';
-	
+
 	constructor(private memoryTool: MemoryTool) {}
 
 	/**
@@ -21,7 +21,7 @@ export class ReadonlyMemoryProvider implements vscode.TextDocumentContentProvide
 		}
 
 		const storage = this.memoryTool.getStorageForWorkspace(workspaceFolders[0]);
-		
+
 		try {
 			// The URI path already contains the full memory path
 			const content = await storage.readRaw(uri.path);
@@ -40,9 +40,12 @@ export class ReadonlyMemoryProvider implements vscode.TextDocumentContentProvide
 
 	/**
 	 * Create a URI for a memory file
-	 * Adds .md extension to ensure files open as markdown
+	 * Adds .md extension to ensure files open as markdown (if no extension exists)
 	 */
 	createUri(memoryPath: string): vscode.Uri {
-		return vscode.Uri.parse(`${this.scheme}:${memoryPath}.md`);
+		// Only add .md if the file doesn't already have an extension
+		const hasExtension = /\.[^/.]+$/.test(memoryPath);
+		const uriPath = hasExtension ? memoryPath : `${memoryPath}.md`;
+		return vscode.Uri.parse(`${this.scheme}:${uriPath}`);
 	}
 }

@@ -86,6 +86,7 @@ export interface IMemoryFileInfo {
 	lastAccessed: Date;
 	lastModified: Date;
 	isPinned?: boolean;
+	tldr?: string;
 }
 
 /**
@@ -193,4 +194,19 @@ export interface IMemoryStorage {
 	 * Set PIN manager for this storage instance
 	 */
 	setPinManager(pinManager: IPinManager): void;
+
+	/**
+	 * Get TL;DR summary for a file
+	 */
+	getTldr(path: string): Promise<string | undefined>;
+
+	/**
+	 * Set TL;DR summary for a file
+	 */
+	setTldr(path: string, tldr: string): Promise<void>;
+
+	/**
+	 * Delete TL;DR summary for a file
+	 */
+	deleteTldr(path: string): Promise<void>;
 }

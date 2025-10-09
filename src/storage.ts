@@ -7,19 +7,86 @@ import { TextUtils } from './lib/utils.js';
 const MEMORIES_DIR = getMemoriesDir();
 
 /**
- * In-memory storage implementation using Map-based storage
- * Provides workspace-scoped ephemeral storage without requiring VS Code's memfs scheme
+ * Workspace state storage implementation using VS Code's Memento API
+ * Provides workspace-scoped persistent storage across VS Code sessions
  */
-export class InMemoryStorage implements IMemoryStorage {
-	private fileMap = new Map<string, { content: Uint8Array; modified: Date }>();
-	private directorySet = new Set<string>();
-	private lastAccessMap = new Map<string, Date>();
-	private lastModifiedMap = new Map<string, Date>();
+export class WorkspaceStateStorage implements IMemoryStorage {
+	private memento: vscode.Memento;
+	private workspaceFolder: vscode.WorkspaceFolder;
 	private pinManager?: IPinManager;
 
-	constructor(private workspaceFolder: vscode.WorkspaceFolder) {
-		// Initialize with root memories directory
-		this.directorySet.add(MEMORIES_DIR);
+	constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder) {
+		this.memento = context.workspaceState;
+		this.workspaceFolder = workspaceFolder;
+		this.ensureInitialized();
+	}
+
+	private async ensureInitialized(): Promise<void> {
+		// Initialize storage structure if not exists
+		const filesKey = this.getStorageKey('files');
+		if (!this.memento.get(filesKey)) {
+			await this.memento.update(filesKey, {});
+		}
+		const dirsKey = this.getStorageKey('directories');
+		if (!this.memento.get(dirsKey)) {
+			await this.memento.update(dirsKey, { [MEMORIES_DIR]: true });
+		}
+		const accessKey = this.getStorageKey('access');
+		if (!this.memento.get(accessKey)) {
+			await this.memento.update(accessKey, {});
+		}
+		const modifiedKey = this.getStorageKey('modified');
+		if (!this.memento.get(modifiedKey)) {
+			await this.memento.update(modifiedKey, {});
+		}
+		const tldrKey = this.getStorageKey('tldr');
+		if (!this.memento.get(tldrKey)) {
+			await this.memento.update(tldrKey, {});
+		}
+	}
+
+	private getStorageKey(type: 'files' | 'directories' | 'access' | 'modified' | 'tldr'): string {
+		return `agent-memory:${this.workspaceFolder.name}:${type}`;
+	}
+
+	private getFiles(): Record<string, { content: string; modified: string }> {
+		return this.memento.get(this.getStorageKey('files'), {});
+	}
+
+	private async setFiles(files: Record<string, { content: string; modified: string }>): Promise<void> {
+		await this.memento.update(this.getStorageKey('files'), files);
+	}
+
+	private getDirectories(): Record<string, boolean> {
+		return this.memento.get(this.getStorageKey('directories'), { [MEMORIES_DIR]: true });
+	}
+
+	private async setDirectories(dirs: Record<string, boolean>): Promise<void> {
+		await this.memento.update(this.getStorageKey('directories'), dirs);
+	}
+
+	private getAccessTimes(): Record<string, string> {
+		return this.memento.get(this.getStorageKey('access'), {});
+	}
+
+	private async setAccessTimes(times: Record<string, string>): Promise<void> {
+		await this.memento.update(this.getStorageKey('access'), times);
+	}
+
+	private getModifiedTimes(): Record<string, string> {
+		return this.memento.get(this.getStorageKey('modified'), {});
+	}
+
+	private async setModifiedTimes(times: Record<string, string>): Promise<void> {
+		await this.memento.update(this.getStorageKey('modified'), times);
+	}
+
+	private getTldrs(): Record<string, string> {
+		return this.memento.get(this.getStorageKey('tldr'), {});
+	}
+
+	private async setTldrs(tldrs: Record<string, string>): Promise<void> {
+		await this.memento.update(this.getStorageKey('tldr'), tldrs);
 	}
 
 	setPinManager(pinManager: IPinManager): void {
@@ -39,26 +106,32 @@ export class InMemoryStorage implements IMemoryStorage {
 		return memoryPath;
 	}
 
-	private ensureParentDirectories(filePath: string): void {
+	private async ensureParentDirectories(filePath: string): Promise<void> {
+		const directories = this.getDirectories();
 		const parentDir = path.posix.dirname(filePath);
-		if (!this.directorySet.has(parentDir)) {
-			this.ensureParentDirectories(parentDir);
-			this.directorySet.add(parentDir);
+		if (!directories[parentDir]) {
+			await this.ensureParentDirectories(parentDir);
+			directories[parentDir] = true;
+			await this.setDirectories(directories);
 		}
 	}
 
 	async view(memoryPath: string, viewRange?: [number, number]): Promise<string> {
 		const fullPath = this.getFullPath(memoryPath);
-		this.lastAccessMap.set(fullPath, new Date());
+		const accessTimes = this.getAccessTimes();
+		accessTimes[fullPath] = new Date().toISOString();
+		await this.setAccessTimes(accessTimes);
 
 		try {
+			const directories = this.getDirectories();
 			// Check if it's a directory
-			if (this.directorySet.has(fullPath)) {
+			if (directories[fullPath]) {
 				// List directory contents
 				const items: string[] = [];
+				const files = this.getFiles();
 
-				// Find all files and subdirectories in this directory
-				for (const dirPath of this.directorySet) {
+				// Find all subdirectories in this directory
+				for (const dirPath of Object.keys(directories)) {
 					if (dirPath !== fullPath && dirPath.startsWith(fullPath + '/')) {
 						const relativePath = dirPath.slice(fullPath.length + 1);
 						if (!relativePath.includes('/')) {
@@ -67,7 +140,8 @@ export class InMemoryStorage implements IMemoryStorage {
 					}
 				}
 
-				for (const filePath of this.fileMap.keys()) {
+				// Find all files in this directory
+				for (const filePath of Object.keys(files)) {
 					if (filePath.startsWith(fullPath + '/')) {
 						const relativePath = filePath.slice(fullPath.length + 1);
 						if (!relativePath.includes('/')) {
@@ -85,12 +159,13 @@ export class InMemoryStorage implements IMemoryStorage {
 			}
 
 			// Check if it's a file
-			const fileEntry = this.fileMap.get(fullPath);
+			const files = this.getFiles();
+			const fileEntry = files[fullPath];
 			if (!fileEntry) {
 				throw new Error(`The file '${memoryPath}' does not exist yet. Use the 'create' command to create it first, or use 'view' on the parent directory '/memories' to see available files.`);
 			}
 
-			const text = Buffer.from(fileEntry.content).toString('utf8');
+			const text = fileEntry.content;
 			const lines = text.split('\n');
 
 			let displayLines = lines;
@@ -118,116 +193,160 @@ export class InMemoryStorage implements IMemoryStorage {
 
 	async readRaw(memoryPath: string): Promise<string> {
 		const fullPath = this.getFullPath(memoryPath);
-		this.lastAccessMap.set(fullPath, new Date());
+		const accessTimes = this.getAccessTimes();
+		accessTimes[fullPath] = new Date().toISOString();
+		await this.setAccessTimes(accessTimes);
 
-		const fileEntry = this.fileMap.get(fullPath);
+		const files = this.getFiles();
+		const fileEntry = files[fullPath];
 		if (!fileEntry) {
 			throw new Error(`The file '${memoryPath}' does not exist.`);
 		}
 
-		return Buffer.from(fileEntry.content).toString('utf8');
+		return fileEntry.content;
 	}
 
 	async create(memoryPath: string, content: string): Promise<void> {
 		const fullPath = this.getFullPath(memoryPath);
 
 		// Ensure parent directories exist
-		this.ensureParentDirectories(fullPath);
+		await this.ensureParentDirectories(fullPath);
 
 		// Store the file
-		const now = new Date();
-		this.fileMap.set(fullPath, {
-			content: Buffer.from(content, 'utf8'),
-			modified: now
-		});
-		this.lastAccessMap.set(fullPath, now);
-		this.lastModifiedMap.set(fullPath, now);
+		const now = new Date().toISOString();
+		const files = this.getFiles();
+		files[fullPath] = { content, modified: now };
+		await this.setFiles(files);
+
+		const accessTimes = this.getAccessTimes();
+		accessTimes[fullPath] = now;
+		await this.setAccessTimes(accessTimes);
+
+		const modifiedTimes = this.getModifiedTimes();
+		modifiedTimes[fullPath] = now;
+		await this.setModifiedTimes(modifiedTimes);
 	}
 
 	async strReplace(memoryPath: string, oldStr: string, newStr: string): Promise<void> {
 		const fullPath = this.getFullPath(memoryPath);
 
-		const fileEntry = this.fileMap.get(fullPath);
+		const files = this.getFiles();
+		const fileEntry = files[fullPath];
 		if (!fileEntry) {
 			throw new Error(`Cannot modify '${memoryPath}' because it does not exist. Use 'create' to create the file first, or 'view' to check available files in '/memories'.`);
 		}
 
-		const text = Buffer.from(fileEntry.content).toString('utf8');
+		const text = fileEntry.content;
 		const newText = TextUtils.replaceFirst(text, oldStr, newStr, memoryPath);
 
-		const now = new Date();
-		this.fileMap.set(fullPath, {
-			content: Buffer.from(newText, 'utf8'),
-			modified: now
-		});
-		this.lastAccessMap.set(fullPath, now);
-		this.lastModifiedMap.set(fullPath, now);
+		const now = new Date().toISOString();
+		files[fullPath] = { content: newText, modified: now };
+		await this.setFiles(files);
+
+		const accessTimes = this.getAccessTimes();
+		accessTimes[fullPath] = now;
+		await this.setAccessTimes(accessTimes);
+
+		const modifiedTimes = this.getModifiedTimes();
+		modifiedTimes[fullPath] = now;
+		await this.setModifiedTimes(modifiedTimes);
 	}
 
 	async insert(memoryPath: string, insertLine: number, insertText: string): Promise<void> {
 		const fullPath = this.getFullPath(memoryPath);
 
-		const fileEntry = this.fileMap.get(fullPath);
+		const files = this.getFiles();
+		const fileEntry = files[fullPath];
 		if (!fileEntry) {
 			throw new Error(`Cannot insert text into '${memoryPath}' because the file does not exist. Use 'create' to create the file first, or 'view' to check available files in '/memories'.`);
 		}
 
-		const text = Buffer.from(fileEntry.content).toString('utf8');
+		const text = fileEntry.content;
 		const newText = TextUtils.insertAtLine(text, insertLine, insertText);
 
-		const now = new Date();
-		this.fileMap.set(fullPath, {
-			content: Buffer.from(newText, 'utf8'),
-			modified: now
-		});
-		this.lastAccessMap.set(fullPath, now);
-		this.lastModifiedMap.set(fullPath, now);
+		const now = new Date().toISOString();
+		files[fullPath] = { content: newText, modified: now };
+		await this.setFiles(files);
+
+		const accessTimes = this.getAccessTimes();
+		accessTimes[fullPath] = now;
+		await this.setAccessTimes(accessTimes);
+
+		const modifiedTimes = this.getModifiedTimes();
+		modifiedTimes[fullPath] = now;
+		await this.setModifiedTimes(modifiedTimes);
 	}
 
 	async delete(memoryPath: string): Promise<string> {
 		const fullPath = this.getFullPath(memoryPath);
+		const directories = this.getDirectories();
 
 		// Check if it's a directory
-		if (this.directorySet.has(fullPath)) {
-			// Delete all files and subdirectories within this directory
-			const filesToDelete = Array.from(this.fileMap.keys()).filter(path => path.startsWith(fullPath + '/'));
+		if (directories[fullPath]) {
+			const files = this.getFiles();
+			const accessTimes = this.getAccessTimes();
+			const modifiedTimes = this.getModifiedTimes();
+			const tldrs = this.getTldrs();
+
+			// Delete all files within this directory
+			const filesToDelete = Object.keys(files).filter(path => path.startsWith(fullPath + '/'));
 			for (const filePath of filesToDelete) {
-				this.fileMap.delete(filePath);
-				this.lastAccessMap.delete(filePath);
-				this.lastModifiedMap.delete(filePath);
+				delete files[filePath];
+				delete accessTimes[filePath];
+				delete modifiedTimes[filePath];
+				delete tldrs[filePath];
 				// Remove PIN state for deleted files
 				if (this.pinManager) {
 					await this.pinManager.removePinnedPath(filePath);
 				}
 			}
 
-			const dirsToDelete = Array.from(this.directorySet).filter(path => path.startsWith(fullPath + '/'));
+			// Delete all subdirectories
+			const dirsToDelete = Object.keys(directories).filter(path => path.startsWith(fullPath + '/'));
 			for (const dirPath of dirsToDelete) {
-				this.directorySet.delete(dirPath);
+				delete directories[dirPath];
 			}
 
 			// Don't delete the root memories directory
 			if (fullPath !== MEMORIES_DIR) {
-				this.directorySet.delete(fullPath);
+				delete directories[fullPath];
 			}
+
+			await this.setFiles(files);
+			await this.setAccessTimes(accessTimes);
+			await this.setModifiedTimes(modifiedTimes);
+			await this.setTldrs(tldrs);
+			await this.setDirectories(directories);
 
 			return `Directory deleted: ${memoryPath}`;
 		}
 		// Check if it's a file
-		else if (this.fileMap.has(fullPath)) {
-			this.fileMap.delete(fullPath);
-			this.lastAccessMap.delete(fullPath);
-			this.lastModifiedMap.delete(fullPath);
-
-			// Remove PIN state for deleted file
-			if (this.pinManager) {
-				await this.pinManager.removePinnedPath(fullPath);
-			}
-
-			return `File deleted: ${memoryPath}`;
-		}
 		else {
-			throw new Error(`Cannot delete '${memoryPath}' because it does not exist. Use 'view' on '/memories' to see what files are available to delete.`);
+			const files = this.getFiles();
+			if (files[fullPath]) {
+				const accessTimes = this.getAccessTimes();
+				const modifiedTimes = this.getModifiedTimes();
+				const tldrs = this.getTldrs();
+
+				delete files[fullPath];
+				delete accessTimes[fullPath];
+				delete modifiedTimes[fullPath];
+				delete tldrs[fullPath];
+
+				await this.setFiles(files);
+				await this.setAccessTimes(accessTimes);
+				await this.setModifiedTimes(modifiedTimes);
+				await this.setTldrs(tldrs);
+
+				// Remove PIN state for deleted file
+				if (this.pinManager) {
+					await this.pinManager.removePinnedPath(fullPath);
+				}
+
+				return `File deleted: ${memoryPath}`;
+			} else {
+				throw new Error(`Cannot delete '${memoryPath}' because it does not exist. Use 'view' on '/memories' to see what files are available to delete.`);
+			}
 		}
 	}
 
@@ -236,29 +355,40 @@ export class InMemoryStorage implements IMemoryStorage {
 		const newFullPath = this.getFullPath(newPath);
 
 		// Ensure parent directories exist for new path
-		this.ensureParentDirectories(newFullPath);
+		await this.ensureParentDirectories(newFullPath);
+
+		const files = this.getFiles();
+		const directories = this.getDirectories();
+		const accessTimes = this.getAccessTimes();
+		const modifiedTimes = this.getModifiedTimes();
+		const tldrs = this.getTldrs();
 
 		// Check if it's a file
-		if (this.fileMap.has(oldFullPath)) {
-			const fileEntry = this.fileMap.get(oldFullPath)!;
+		if (files[oldFullPath]) {
+			const fileEntry = files[oldFullPath];
 
 			// Move the file
-			this.fileMap.set(newFullPath, fileEntry);
-			this.fileMap.delete(oldFullPath);
+			files[newFullPath] = fileEntry;
+			delete files[oldFullPath];
 
 			// Update metadata
-			const accessTime = this.lastAccessMap.get(oldFullPath);
-			const modifiedTime = this.lastModifiedMap.get(oldFullPath);
-
-			this.lastAccessMap.delete(oldFullPath);
-			this.lastModifiedMap.delete(oldFullPath);
-
-			if (accessTime) {
-				this.lastAccessMap.set(newFullPath, accessTime);
+			if (accessTimes[oldFullPath]) {
+				accessTimes[newFullPath] = accessTimes[oldFullPath];
+				delete accessTimes[oldFullPath];
 			}
-			if (modifiedTime) {
-				this.lastModifiedMap.set(newFullPath, modifiedTime);
+			if (modifiedTimes[oldFullPath]) {
+				modifiedTimes[newFullPath] = modifiedTimes[oldFullPath];
+				delete modifiedTimes[oldFullPath];
 			}
+			if (tldrs[oldFullPath]) {
+				tldrs[newFullPath] = tldrs[oldFullPath];
+				delete tldrs[oldFullPath];
+			}
+
+			await this.setFiles(files);
+			await this.setAccessTimes(accessTimes);
+			await this.setModifiedTimes(modifiedTimes);
+			await this.setTldrs(tldrs);
 
 			// Update PIN state for renamed file
 			if (this.pinManager) {
@@ -266,28 +396,30 @@ export class InMemoryStorage implements IMemoryStorage {
 			}
 		}
 		// Check if it's a directory
-		else if (this.directorySet.has(oldFullPath)) {
+		else if (directories[oldFullPath]) {
 			// Move the directory and all its contents
-			this.directorySet.add(newFullPath);
-			this.directorySet.delete(oldFullPath);
+			directories[newFullPath] = true;
+			delete directories[oldFullPath];
 
 			// Move all files in the directory
-			const filesToMove = Array.from(this.fileMap.entries()).filter(([path]) => path.startsWith(oldFullPath + '/'));
-			for (const [filePath, fileEntry] of filesToMove) {
+			const filesToMove = Object.keys(files).filter(path => path.startsWith(oldFullPath + '/'));
+			for (const filePath of filesToMove) {
 				const newFilePath = newFullPath + filePath.slice(oldFullPath.length);
-				this.fileMap.set(newFilePath, fileEntry);
-				this.fileMap.delete(filePath);
+				files[newFilePath] = files[filePath];
+				delete files[filePath];
 
 				// Update metadata
-				const accessTime = this.lastAccessMap.get(filePath);
-				const modifiedTime = this.lastModifiedMap.get(filePath);
-				this.lastAccessMap.delete(filePath);
-				this.lastModifiedMap.delete(filePath);
-				if (accessTime) {
-					this.lastAccessMap.set(newFilePath, accessTime);
+				if (accessTimes[filePath]) {
+					accessTimes[newFilePath] = accessTimes[filePath];
+					delete accessTimes[filePath];
 				}
-				if (modifiedTime) {
-					this.lastModifiedMap.set(newFilePath, modifiedTime);
+				if (modifiedTimes[filePath]) {
+					modifiedTimes[newFilePath] = modifiedTimes[filePath];
+					delete modifiedTimes[filePath];
+				}
+				if (tldrs[filePath]) {
+					tldrs[newFilePath] = tldrs[filePath];
+					delete tldrs[filePath];
 				}
 
 				// Update PIN state for renamed files in directory
@@ -297,12 +429,18 @@ export class InMemoryStorage implements IMemoryStorage {
 			}
 
 			// Move all subdirectories
-			const dirsToMove = Array.from(this.directorySet).filter(path => path.startsWith(oldFullPath + '/'));
+			const dirsToMove = Object.keys(directories).filter(path => path.startsWith(oldFullPath + '/'));
 			for (const dirPath of dirsToMove) {
 				const newDirPath = newFullPath + dirPath.slice(oldFullPath.length);
-				this.directorySet.add(newDirPath);
-				this.directorySet.delete(dirPath);
+				directories[newDirPath] = true;
+				delete directories[dirPath];
 			}
+
+			await this.setFiles(files);
+			await this.setDirectories(directories);
+			await this.setAccessTimes(accessTimes);
+			await this.setModifiedTimes(modifiedTimes);
+			await this.setTldrs(tldrs);
 		}
 		else {
 			throw new Error(`Cannot rename '${oldPath}' because it does not exist. Use 'view' on '/memories' to see what files are available to rename.`);
@@ -310,10 +448,15 @@ export class InMemoryStorage implements IMemoryStorage {
 	}
 
 	async listFiles(): Promise<IMemoryFileInfo[]> {
-		const files: IMemoryFileInfo[] = [];
+		const filesData: IMemoryFileInfo[] = [];
+		const directories = this.getDirectories();
+		const files = this.getFiles();
+		const accessTimes = this.getAccessTimes();
+		const modifiedTimes = this.getModifiedTimes();
+		const tldrs = this.getTldrs();
 
 		// Add all directories
-		for (const dirPath of this.directorySet) {
+		for (const dirPath of Object.keys(directories)) {
 			if (dirPath === MEMORIES_DIR) {
 				continue; // Skip root directory
 			}
@@ -323,28 +466,648 @@ export class InMemoryStorage implements IMemoryStorage {
 				name: path.posix.basename(dirPath),
 				isDirectory: true,
 				size: 0,
-				lastAccessed: new Date(),
-				lastModified: new Date(),
+				lastAccessed: accessTimes[dirPath] ? new Date(accessTimes[dirPath]) : new Date(),
+				lastModified: modifiedTimes[dirPath] ? new Date(modifiedTimes[dirPath]) : new Date(),
 				isPinned: this.pinManager ? await this.pinManager.isPinned(dirPath) : false
 			};
-			files.push(info);
+			filesData.push(info);
 		}
 
 		// Add all files
-		for (const [filePath, fileEntry] of this.fileMap.entries()) {
+		for (const [filePath, fileEntry] of Object.entries(files)) {
+			const modified = new Date(fileEntry.modified);
 			const info: IMemoryFileInfo = {
 				path: filePath,
 				name: path.posix.basename(filePath),
 				isDirectory: false,
-				size: fileEntry.content.length,
-				lastAccessed: this.lastAccessMap.get(filePath) || fileEntry.modified,
-				lastModified: this.lastModifiedMap.get(filePath) || fileEntry.modified,
-				isPinned: this.pinManager ? await this.pinManager.isPinned(filePath) : false
+				size: Buffer.from(fileEntry.content, 'utf8').length,
+				lastAccessed: accessTimes[filePath] ? new Date(accessTimes[filePath]) : modified,
+				lastModified: modifiedTimes[filePath] ? new Date(modifiedTimes[filePath]) : modified,
+				isPinned: this.pinManager ? await this.pinManager.isPinned(filePath) : false,
+				tldr: tldrs[filePath]
 			};
-			files.push(info);
+			filesData.push(info);
 		}
 
-		return files.sort((a, b) => a.path.localeCompare(b.path));
+		return filesData.sort((a, b) => a.path.localeCompare(b.path));
+	}
+
+	async getTldr(memoryPath: string): Promise<string | undefined> {
+		const fullPath = this.getFullPath(memoryPath);
+		const tldrs = this.getTldrs();
+		return tldrs[fullPath];
+	}
+
+	async setTldr(memoryPath: string, tldr: string): Promise<void> {
+		const fullPath = this.getFullPath(memoryPath);
+		const tldrs = this.getTldrs();
+		tldrs[fullPath] = tldr;
+		await this.setTldrs(tldrs);
+	}
+
+	async deleteTldr(memoryPath: string): Promise<void> {
+		const fullPath = this.getFullPath(memoryPath);
+		const tldrs = this.getTldrs();
+		delete tldrs[fullPath];
+		await this.setTldrs(tldrs);
+	}
+}
+
+/**
+ * Branch-state storage implementation using VS Code's Memento API
+ * Provides workspace and git branch-scoped persistent storage
+ * Isolates memory per branch for better context separation
+ */
+export class BranchStateStorage implements IMemoryStorage {
+	private memento: vscode.Memento;
+	private workspaceFolder: vscode.WorkspaceFolder;
+	private pinManager?: IPinManager;
+	private currentBranch: string = 'unknown';
+	private branchChangeListener?: vscode.Disposable;
+
+	constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder) {
+		this.memento = context.workspaceState;
+		this.workspaceFolder = workspaceFolder;
+		this.initializeBranch();
+	}
+
+	private async initializeBranch(): Promise<void> {
+		this.currentBranch = await this.getCurrentGitBranch();
+		await this.ensureInitialized();
+		this.setupBranchChangeListener();
+	}
+
+	private async getCurrentGitBranch(): Promise<string> {
+		try {
+			// Method 1: Use VS Code Git Extension API (preferred)
+			const gitExtension = vscode.extensions.getExtension('vscode.git');
+			if (gitExtension) {
+				const git = gitExtension.exports;
+				const api = git.getAPI(1);
+				const repo = api.repositories.find((r: any) =>
+					r.rootUri.toString() === this.workspaceFolder.uri.toString()
+				);
+				if (repo?.state.HEAD?.name) {
+					return this.sanitizeBranchName(repo.state.HEAD.name);
+				}
+			}
+
+			// Method 2: Fallback to reading .git/HEAD file
+			const gitHeadUri = vscode.Uri.joinPath(this.workspaceFolder.uri, '.git', 'HEAD');
+			const headContent = await vscode.workspace.fs.readFile(gitHeadUri);
+			const headText = Buffer.from(headContent).toString('utf8').trim();
+
+			if (headText.startsWith('ref: refs/heads/')) {
+				const branchName = headText.substring('ref: refs/heads/'.length);
+				return this.sanitizeBranchName(branchName);
+			}
+
+			return 'detached-head';
+		} catch (error) {
+			console.warn('Failed to detect git branch:', error);
+			return 'no-git';
+		}
+	}
+
+	private sanitizeBranchName(branchName: string): string {
+		// Hash the branch name to avoid issues with special characters
+		// Use a simple hash function for consistent, safe storage keys
+		let hash = 0;
+		for (let i = 0; i < branchName.length; i++) {
+			const char = branchName.charCodeAt(i);
+			hash = ((hash << 5) - hash) + char;
+			hash = hash & hash; // Convert to 32bit integer
+		}
+		// Return a combination of hash and sanitized name for readability in debugging
+		const sanitized = branchName.replace(/[^a-zA-Z0-9-]/g, '-');
+		return `${sanitized.substring(0, 20)}-${Math.abs(hash).toString(16)}`;
+	}
+
+	private setupBranchChangeListener(): void {
+		try {
+			const gitExtension = vscode.extensions.getExtension('vscode.git');
+			if (!gitExtension) {
+				return;
+			}
+
+			const git = gitExtension.exports;
+			const api = git.getAPI(1);
+			const repo = api.repositories.find((r: any) =>
+				r.rootUri.toString() === this.workspaceFolder.uri.toString()
+			);
+
+			if (!repo) {
+				return;
+			}
+
+			this.branchChangeListener = repo.state.onDidChange(async () => {
+				const newBranch = repo.state.HEAD?.name ? this.sanitizeBranchName(repo.state.HEAD.name) : 'unknown';
+				if (newBranch !== this.currentBranch) {
+					console.log(`Branch changed from ${this.currentBranch} to ${newBranch}`);
+					this.currentBranch = newBranch;
+					await this.ensureInitialized();
+					// Auto-refresh the memory tree view
+					vscode.commands.executeCommand('agentMemory.refresh');
+				}
+			});
+		} catch (error) {
+			console.warn('Failed to setup branch change listener:', error);
+		}
+	}
+
+	dispose(): void {
+		this.branchChangeListener?.dispose();
+	}
+
+	private async ensureInitialized(): Promise<void> {
+		// Initialize storage structure if not exists
+		const filesKey = this.getStorageKey('files');
+		if (!this.memento.get(filesKey)) {
+			await this.memento.update(filesKey, {});
+		}
+		const dirsKey = this.getStorageKey('directories');
+		if (!this.memento.get(dirsKey)) {
+			await this.memento.update(dirsKey, { [MEMORIES_DIR]: true });
+		}
+		const accessKey = this.getStorageKey('access');
+		if (!this.memento.get(accessKey)) {
+			await this.memento.update(accessKey, {});
+		}
+		const modifiedKey = this.getStorageKey('modified');
+		if (!this.memento.get(modifiedKey)) {
+			await this.memento.update(modifiedKey, {});
+		}
+		const tldrKey = this.getStorageKey('tldr');
+		if (!this.memento.get(tldrKey)) {
+			await this.memento.update(tldrKey, {});
+		}
+	}
+
+	private getStorageKey(type: 'files' | 'directories' | 'access' | 'modified' | 'tldr'): string {
+		return `agent-memory:${this.workspaceFolder.name}:${this.currentBranch}:${type}`;
+	}
+
+	private getFiles(): Record<string, { content: string; modified: string }> {
+		return this.memento.get(this.getStorageKey('files'), {});
+	}
+
+	private async setFiles(files: Record<string, { content: string; modified: string }>): Promise<void> {
+		await this.memento.update(this.getStorageKey('files'), files);
+	}
+
+	private getDirectories(): Record<string, boolean> {
+		return this.memento.get(this.getStorageKey('directories'), { [MEMORIES_DIR]: true });
+	}
+
+	private async setDirectories(dirs: Record<string, boolean>): Promise<void> {
+		await this.memento.update(this.getStorageKey('directories'), dirs);
+	}
+
+	private getAccessTimes(): Record<string, string> {
+		return this.memento.get(this.getStorageKey('access'), {});
+	}
+
+	private async setAccessTimes(times: Record<string, string>): Promise<void> {
+		await this.memento.update(this.getStorageKey('access'), times);
+	}
+
+	private getModifiedTimes(): Record<string, string> {
+		return this.memento.get(this.getStorageKey('modified'), {});
+	}
+
+	private async setModifiedTimes(times: Record<string, string>): Promise<void> {
+		await this.memento.update(this.getStorageKey('modified'), times);
+	}
+
+	private getTldrs(): Record<string, string> {
+		return this.memento.get(this.getStorageKey('tldr'), {});
+	}
+
+	private async setTldrs(tldrs: Record<string, string>): Promise<void> {
+		await this.memento.update(this.getStorageKey('tldr'), tldrs);
+	}
+
+	setPinManager(pinManager: IPinManager): void {
+		this.pinManager = pinManager;
+	}
+
+	getWorkspaceId(): string {
+		return `${this.workspaceFolder.name}:${this.currentBranch}`;
+	}
+
+	private getFullPath(memoryPath: string): string {
+		validateMemoryPath(memoryPath);
+		// Normalize path to always start with /memories
+		if (!memoryPath.startsWith(MEMORIES_DIR)) {
+			return path.posix.join(MEMORIES_DIR, memoryPath);
+		}
+		return memoryPath;
+	}
+
+	private async ensureParentDirectories(filePath: string): Promise<void> {
+		const directories = this.getDirectories();
+		const parentDir = path.posix.dirname(filePath);
+		if (!directories[parentDir]) {
+			await this.ensureParentDirectories(parentDir);
+			directories[parentDir] = true;
+			await this.setDirectories(directories);
+		}
+	}
+
+	async view(memoryPath: string, viewRange?: [number, number]): Promise<string> {
+		const fullPath = this.getFullPath(memoryPath);
+		const accessTimes = this.getAccessTimes();
+		accessTimes[fullPath] = new Date().toISOString();
+		await this.setAccessTimes(accessTimes);
+
+		try {
+			const directories = this.getDirectories();
+			// Check if it's a directory
+			if (directories[fullPath]) {
+				// List directory contents
+				const items: string[] = [];
+				const files = this.getFiles();
+
+				// Find all subdirectories in this directory
+				for (const dirPath of Object.keys(directories)) {
+					if (dirPath !== fullPath && dirPath.startsWith(fullPath + '/')) {
+						const relativePath = dirPath.slice(fullPath.length + 1);
+						if (!relativePath.includes('/')) {
+							items.push(relativePath + '/');
+						}
+					}
+				}
+
+				// Find all files in this directory
+				for (const filePath of Object.keys(files)) {
+					if (filePath.startsWith(fullPath + '/')) {
+						const relativePath = filePath.slice(fullPath.length + 1);
+						if (!relativePath.includes('/')) {
+							items.push(relativePath);
+						}
+					}
+				}
+
+				if (items.length === 0 && fullPath === MEMORIES_DIR) {
+					return `Directory: ${memoryPath}\n(empty - no files created yet)`;
+				}
+
+				items.sort();
+				return `Directory: ${memoryPath}\n${items.map(item => `- ${item}`).join('\n')}`;
+			}
+
+			// Check if it's a file
+			const files = this.getFiles();
+			const fileEntry = files[fullPath];
+			if (!fileEntry) {
+				throw new Error(`The file '${memoryPath}' does not exist yet. Use the 'create' command to create it first, or use 'view' on the parent directory '/memories' to see available files.`);
+			}
+
+			const text = fileEntry.content;
+			const lines = text.split('\n');
+
+			let displayLines = lines;
+			let startNum = 1;
+
+			if (viewRange && viewRange.length === 2) {
+				const startLine = Math.max(1, viewRange[0]) - 1;
+				const endLine = viewRange[1] === -1 ? lines.length : viewRange[1];
+				displayLines = lines.slice(startLine, endLine);
+				startNum = startLine + 1;
+			}
+
+			const numberedLines = displayLines.map(
+				(line, i) => `${String(i + startNum).padStart(4, ' ')}: ${line}`
+			);
+
+			return numberedLines.join('\n');
+		} catch (error) {
+			if (error instanceof Error) {
+				throw error;
+			}
+			throw new Error(`Unexpected error viewing '${memoryPath}': ${String(error)}`);
+		}
+	}
+
+	async readRaw(memoryPath: string): Promise<string> {
+		const fullPath = this.getFullPath(memoryPath);
+		const accessTimes = this.getAccessTimes();
+		accessTimes[fullPath] = new Date().toISOString();
+		await this.setAccessTimes(accessTimes);
+
+		const files = this.getFiles();
+		const fileEntry = files[fullPath];
+		if (!fileEntry) {
+			throw new Error(`The file '${memoryPath}' does not exist.`);
+		}
+
+		return fileEntry.content;
+	}
+
+	async create(memoryPath: string, content: string): Promise<void> {
+		const fullPath = this.getFullPath(memoryPath);
+
+		// Ensure parent directories exist
+		await this.ensureParentDirectories(fullPath);
+
+		// Store the file
+		const now = new Date().toISOString();
+		const files = this.getFiles();
+		files[fullPath] = { content, modified: now };
+		await this.setFiles(files);
+
+		const accessTimes = this.getAccessTimes();
+		accessTimes[fullPath] = now;
+		await this.setAccessTimes(accessTimes);
+
+		const modifiedTimes = this.getModifiedTimes();
+		modifiedTimes[fullPath] = now;
+		await this.setModifiedTimes(modifiedTimes);
+	}
+
+	async strReplace(memoryPath: string, oldStr: string, newStr: string): Promise<void> {
+		const fullPath = this.getFullPath(memoryPath);
+
+		const files = this.getFiles();
+		const fileEntry = files[fullPath];
+		if (!fileEntry) {
+			throw new Error(`Cannot modify '${memoryPath}' because it does not exist. Use 'create' to create the file first, or 'view' to check available files in '/memories'.`);
+		}
+
+		const text = fileEntry.content;
+		const newText = TextUtils.replaceFirst(text, oldStr, newStr, memoryPath);
+
+		const now = new Date().toISOString();
+		files[fullPath] = { content: newText, modified: now };
+		await this.setFiles(files);
+
+		const accessTimes = this.getAccessTimes();
+		accessTimes[fullPath] = now;
+		await this.setAccessTimes(accessTimes);
+
+		const modifiedTimes = this.getModifiedTimes();
+		modifiedTimes[fullPath] = now;
+		await this.setModifiedTimes(modifiedTimes);
+	}
+
+	async insert(memoryPath: string, insertLine: number, insertText: string): Promise<void> {
+		const fullPath = this.getFullPath(memoryPath);
+
+		const files = this.getFiles();
+		const fileEntry = files[fullPath];
+		if (!fileEntry) {
+			throw new Error(`Cannot insert text into '${memoryPath}' because the file does not exist. Use 'create' to create the file first, or 'view' to check available files in '/memories'.`);
+		}
+
+		const text = fileEntry.content;
+		const newText = TextUtils.insertAtLine(text, insertLine, insertText);
+
+		const now = new Date().toISOString();
+		files[fullPath] = { content: newText, modified: now };
+		await this.setFiles(files);
+
+		const accessTimes = this.getAccessTimes();
+		accessTimes[fullPath] = now;
+		await this.setAccessTimes(accessTimes);
+
+		const modifiedTimes = this.getModifiedTimes();
+		modifiedTimes[fullPath] = now;
+		await this.setModifiedTimes(modifiedTimes);
+	}
+
+	async delete(memoryPath: string): Promise<string> {
+		const fullPath = this.getFullPath(memoryPath);
+		const directories = this.getDirectories();
+
+		// Check if it's a directory
+		if (directories[fullPath]) {
+			const files = this.getFiles();
+			const accessTimes = this.getAccessTimes();
+			const modifiedTimes = this.getModifiedTimes();
+			const tldrs = this.getTldrs();
+
+			// Delete all files within this directory
+			const filesToDelete = Object.keys(files).filter(path => path.startsWith(fullPath + '/'));
+			for (const filePath of filesToDelete) {
+				delete files[filePath];
+				delete accessTimes[filePath];
+				delete modifiedTimes[filePath];
+				delete tldrs[filePath];
+				// Remove PIN state for deleted files
+				if (this.pinManager) {
+					await this.pinManager.removePinnedPath(filePath);
+				}
+			}
+
+			// Delete all subdirectories
+			const dirsToDelete = Object.keys(directories).filter(path => path.startsWith(fullPath + '/'));
+			for (const dirPath of dirsToDelete) {
+				delete directories[dirPath];
+			}
+
+			// Don't delete the root memories directory
+			if (fullPath !== MEMORIES_DIR) {
+				delete directories[fullPath];
+			}
+
+			await this.setFiles(files);
+			await this.setAccessTimes(accessTimes);
+			await this.setModifiedTimes(modifiedTimes);
+			await this.setTldrs(tldrs);
+			await this.setDirectories(directories);
+
+			return `Directory deleted: ${memoryPath}`;
+		}
+		// Check if it's a file
+		else {
+			const files = this.getFiles();
+			if (files[fullPath]) {
+				const accessTimes = this.getAccessTimes();
+				const modifiedTimes = this.getModifiedTimes();
+				const tldrs = this.getTldrs();
+
+				delete files[fullPath];
+				delete accessTimes[fullPath];
+				delete modifiedTimes[fullPath];
+				delete tldrs[fullPath];
+
+				await this.setFiles(files);
+				await this.setAccessTimes(accessTimes);
+				await this.setModifiedTimes(modifiedTimes);
+				await this.setTldrs(tldrs);
+
+				// Remove PIN state for deleted file
+				if (this.pinManager) {
+					await this.pinManager.removePinnedPath(fullPath);
+				}
+
+				return `File deleted: ${memoryPath}`;
+			} else {
+				throw new Error(`Cannot delete '${memoryPath}' because it does not exist. Use 'view' on '/memories' to see what files are available to delete.`);
+			}
+		}
+	}
+
+	async rename(oldPath: string, newPath: string): Promise<void> {
+		const oldFullPath = this.getFullPath(oldPath);
+		const newFullPath = this.getFullPath(newPath);
+
+		// Ensure parent directories exist for new path
+		await this.ensureParentDirectories(newFullPath);
+
+		const files = this.getFiles();
+		const directories = this.getDirectories();
+		const accessTimes = this.getAccessTimes();
+		const modifiedTimes = this.getModifiedTimes();
+		const tldrs = this.getTldrs();
+
+		// Check if it's a file
+		if (files[oldFullPath]) {
+			const fileEntry = files[oldFullPath];
+
+			// Move the file
+			files[newFullPath] = fileEntry;
+			delete files[oldFullPath];
+
+			// Update metadata
+			if (accessTimes[oldFullPath]) {
+				accessTimes[newFullPath] = accessTimes[oldFullPath];
+				delete accessTimes[oldFullPath];
+			}
+			if (modifiedTimes[oldFullPath]) {
+				modifiedTimes[newFullPath] = modifiedTimes[oldFullPath];
+				delete modifiedTimes[oldFullPath];
+			}
+			if (tldrs[oldFullPath]) {
+				tldrs[newFullPath] = tldrs[oldFullPath];
+				delete tldrs[oldFullPath];
+			}
+
+			await this.setFiles(files);
+			await this.setAccessTimes(accessTimes);
+			await this.setModifiedTimes(modifiedTimes);
+			await this.setTldrs(tldrs);
+
+			// Update PIN state for renamed file
+			if (this.pinManager) {
+				await this.pinManager.updatePinnedPath(oldFullPath, newFullPath);
+			}
+		}
+		// Check if it's a directory
+		else if (directories[oldFullPath]) {
+			// Move the directory and all its contents
+			directories[newFullPath] = true;
+			delete directories[oldFullPath];
+
+			// Move all files in the directory
+			const filesToMove = Object.keys(files).filter(path => path.startsWith(oldFullPath + '/'));
+			for (const filePath of filesToMove) {
+				const newFilePath = newFullPath + filePath.slice(oldFullPath.length);
+				files[newFilePath] = files[filePath];
+				delete files[filePath];
+
+				// Update metadata
+				if (accessTimes[filePath]) {
+					accessTimes[newFilePath] = accessTimes[filePath];
+					delete accessTimes[filePath];
+				}
+				if (modifiedTimes[filePath]) {
+					modifiedTimes[newFilePath] = modifiedTimes[filePath];
+					delete modifiedTimes[filePath];
+				}
+				if (tldrs[filePath]) {
+					tldrs[newFilePath] = tldrs[filePath];
+					delete tldrs[filePath];
+				}
+
+				// Update PIN state for renamed files in directory
+				if (this.pinManager) {
+					await this.pinManager.updatePinnedPath(filePath, newFilePath);
+				}
+			}
+
+			// Move all subdirectories
+			const dirsToMove = Object.keys(directories).filter(path => path.startsWith(oldFullPath + '/'));
+			for (const dirPath of dirsToMove) {
+				const newDirPath = newFullPath + dirPath.slice(oldFullPath.length);
+				directories[newDirPath] = true;
+				delete directories[dirPath];
+			}
+
+			await this.setFiles(files);
+			await this.setDirectories(directories);
+			await this.setAccessTimes(accessTimes);
+			await this.setModifiedTimes(modifiedTimes);
+			await this.setTldrs(tldrs);
+		}
+		else {
+			throw new Error(`Cannot rename '${oldPath}' because it does not exist. Use 'view' on '/memories' to see what files are available to rename.`);
+		}
+	}
+
+	async listFiles(): Promise<IMemoryFileInfo[]> {
+		const filesData: IMemoryFileInfo[] = [];
+		const directories = this.getDirectories();
+		const files = this.getFiles();
+		const accessTimes = this.getAccessTimes();
+		const modifiedTimes = this.getModifiedTimes();
+		const tldrs = this.getTldrs();
+
+		// Add all directories
+		for (const dirPath of Object.keys(directories)) {
+			if (dirPath === MEMORIES_DIR) {
+				continue; // Skip root directory
+			}
+
+			const info: IMemoryFileInfo = {
+				path: dirPath,
+				name: path.posix.basename(dirPath),
+				isDirectory: true,
+				size: 0,
+				lastAccessed: accessTimes[dirPath] ? new Date(accessTimes[dirPath]) : new Date(),
+				lastModified: modifiedTimes[dirPath] ? new Date(modifiedTimes[dirPath]) : new Date(),
+				isPinned: this.pinManager ? await this.pinManager.isPinned(dirPath) : false
+			};
+			filesData.push(info);
+		}
+
+		// Add all files
+		for (const [filePath, fileEntry] of Object.entries(files)) {
+			const modified = new Date(fileEntry.modified);
+			const info: IMemoryFileInfo = {
+				path: filePath,
+				name: path.posix.basename(filePath),
+				isDirectory: false,
+				size: Buffer.from(fileEntry.content, 'utf8').length,
+				lastAccessed: accessTimes[filePath] ? new Date(accessTimes[filePath]) : modified,
+				lastModified: modifiedTimes[filePath] ? new Date(modifiedTimes[filePath]) : modified,
+				isPinned: this.pinManager ? await this.pinManager.isPinned(filePath) : false,
+				tldr: tldrs[filePath]
+			};
+			filesData.push(info);
+		}
+
+		return filesData.sort((a, b) => a.path.localeCompare(b.path));
+	}
+
+	async getTldr(memoryPath: string): Promise<string | undefined> {
+		const fullPath = this.getFullPath(memoryPath);
+		const tldrs = this.getTldrs();
+		return tldrs[fullPath];
+	}
+
+	async setTldr(memoryPath: string, tldr: string): Promise<void> {
+		const fullPath = this.getFullPath(memoryPath);
+		const tldrs = this.getTldrs();
+		tldrs[fullPath] = tldr;
+		await this.setTldrs(tldrs);
+	}
+
+	async deleteTldr(memoryPath: string): Promise<void> {
+		const fullPath = this.getFullPath(memoryPath);
+		const tldrs = this.getTldrs();
+		delete tldrs[fullPath];
+		await this.setTldrs(tldrs);
 	}
 }
 
@@ -379,6 +1142,10 @@ export class SecretMemoryStorage implements IMemoryStorage {
 			? memoryPath
 			: path.posix.join(MEMORIES_DIR, memoryPath);
 		return `${this.KEY_PREFIX}${this.workspaceFolder.name}:${normalizedPath}`;
+	}
+
+	private getTldrSecretKey(memoryPath: string): string {
+		return this.getSecretKey(memoryPath) + ':tldr';
 	}
 
 	private getFullPath(memoryPath: string): string {
@@ -479,25 +1246,33 @@ export class SecretMemoryStorage implements IMemoryStorage {
 		if (!ENTRY) {
 			// Check if path is the root memories directory
 			if (FULLPATH === MEMORIES_DIR) {
-				const ITEMS: string[] = [];
-				for (const [PATH, DATA] of METADATA.entries()) {
-					if (PATH !== MEMORIES_DIR && PATH.startsWith(MEMORIES_DIR + '/')) {
-						const RELATIVEPATH = PATH.slice(MEMORIES_DIR.length + 1);
-						if (!RELATIVEPATH.includes('/')) {
-							ITEMS.push(DATA.isDirectory ? `${RELATIVEPATH}/` : RELATIVEPATH);
+			const ITEMS: string[] = [];
+			for (const [PATH, DATA] of METADATA.entries()) {
+				if (PATH !== MEMORIES_DIR && PATH.startsWith(MEMORIES_DIR + '/')) {
+					const RELATIVEPATH = PATH.slice(MEMORIES_DIR.length + 1);
+					if (!RELATIVEPATH.includes('/')) {
+						if (DATA.isDirectory) {
+							ITEMS.push(`${RELATIVEPATH}/`);
+						} else {
+							const TLDRSECRETKEY = this.getTldrSecretKey(PATH);
+							const TLDR = await this.secretStorage.get(TLDRSECRETKEY);
+							if (TLDR) {
+								ITEMS.push(`${RELATIVEPATH} - ${TLDR}`);
+							} else {
+								ITEMS.push(RELATIVEPATH);
+							}
 						}
 					}
 				}
-
-				if (ITEMS.length === 0) {
-					return `Directory: ${memoryPath}\n(empty - no files created yet)`;
-				}
-
-				ITEMS.sort();
-				return `Directory: ${memoryPath}\n${ITEMS.map(ITEM => `- ${ITEM}`).join('\n')}`;
 			}
 
-			throw new Error(`The file '${memoryPath}' does not exist yet. Use the 'create' command to create it first, or use 'view' on the parent directory '/memories' to see available files.`);
+			if (ITEMS.length === 0) {
+				return `Directory: ${memoryPath}\n(empty - no files created yet)`;
+			}
+
+			ITEMS.sort();
+			return `Directory: ${memoryPath}\n${ITEMS.map(ITEM => `- ${ITEM}`).join('\n')}`;
+		}			throw new Error(`The file '${memoryPath}' does not exist yet. Use the 'create' command to create it first, or use 'view' on the parent directory '/memories' to see available files.`);
 		}
 
 		if (ENTRY.isDirectory) {
@@ -506,7 +1281,17 @@ export class SecretMemoryStorage implements IMemoryStorage {
 				if (PATH !== FULLPATH && PATH.startsWith(FULLPATH + '/')) {
 					const RELATIVEPATH = PATH.slice(FULLPATH.length + 1);
 					if (!RELATIVEPATH.includes('/')) {
-						ITEMS.push(DATA.isDirectory ? `${RELATIVEPATH}/` : RELATIVEPATH);
+						if (DATA.isDirectory) {
+							ITEMS.push(`${RELATIVEPATH}/`);
+						} else {
+							const TLDRSECRETKEY = this.getTldrSecretKey(PATH);
+							const TLDR = await this.secretStorage.get(TLDRSECRETKEY);
+							if (TLDR) {
+								ITEMS.push(`${RELATIVEPATH} - ${TLDR}`);
+							} else {
+								ITEMS.push(RELATIVEPATH);
+							}
+						}
 					}
 				}
 			}
@@ -632,7 +1417,9 @@ export class SecretMemoryStorage implements IMemoryStorage {
 				const ITEMENTRY = METADATA.get(PATH);
 				if (ITEMENTRY && !ITEMENTRY.isDirectory) {
 					const SECRETKEY = this.getSecretKey(PATH);
+					const TLDRSECRETKEY = this.getTldrSecretKey(PATH);
 					await this.secretStorage.delete(SECRETKEY);
+					await this.secretStorage.delete(TLDRSECRETKEY);
 
 					if (this.pinManager) {
 						await this.pinManager.removePinnedPath(PATH);
@@ -650,7 +1437,9 @@ export class SecretMemoryStorage implements IMemoryStorage {
 			return `Directory deleted: ${memoryPath}`;
 		} else {
 			const SECRETKEY = this.getSecretKey(memoryPath);
+			const TLDRSECRETKEY = this.getTldrSecretKey(memoryPath);
 			await this.secretStorage.delete(SECRETKEY);
+			await this.secretStorage.delete(TLDRSECRETKEY);
 
 			if (this.pinManager) {
 				await this.pinManager.removePinnedPath(FULLPATH);
@@ -690,11 +1479,20 @@ export class SecretMemoryStorage implements IMemoryStorage {
 					// Move the secret
 					const OLDSECRETKEY = this.getSecretKey(OLDITEMPATH);
 					const NEWSECRETKEY = this.getSecretKey(NEWITEMPATH);
+					const OLDTLDRSECRETKEY = this.getTldrSecretKey(OLDITEMPATH);
+					const NEWTLDRSECRETKEY = this.getTldrSecretKey(NEWITEMPATH);
 					const CONTENT = await this.secretStorage.get(OLDSECRETKEY);
 
 					if (CONTENT) {
 						await this.secretStorage.store(NEWSECRETKEY, CONTENT);
 						await this.secretStorage.delete(OLDSECRETKEY);
+					}
+
+					// Move TL;DR if it exists
+					const TLDR = await this.secretStorage.get(OLDTLDRSECRETKEY);
+					if (TLDR) {
+						await this.secretStorage.store(NEWTLDRSECRETKEY, TLDR);
+						await this.secretStorage.delete(OLDTLDRSECRETKEY);
 					}
 
 					if (this.pinManager) {
@@ -709,6 +1507,8 @@ export class SecretMemoryStorage implements IMemoryStorage {
 			// Rename file
 			const OLDSECRETKEY = this.getSecretKey(oldPath);
 			const NEWSECRETKEY = this.getSecretKey(newPath);
+			const OLDTLDRSECRETKEY = this.getTldrSecretKey(oldPath);
+			const NEWTLDRSECRETKEY = this.getTldrSecretKey(newPath);
 			const CONTENT = await this.secretStorage.get(OLDSECRETKEY);
 
 			if (!CONTENT) {
@@ -717,6 +1517,13 @@ export class SecretMemoryStorage implements IMemoryStorage {
 
 			await this.secretStorage.store(NEWSECRETKEY, CONTENT);
 			await this.secretStorage.delete(OLDSECRETKEY);
+
+			// Move TL;DR if it exists
+			const TLDR = await this.secretStorage.get(OLDTLDRSECRETKEY);
+			if (TLDR) {
+				await this.secretStorage.store(NEWTLDRSECRETKEY, TLDR);
+				await this.secretStorage.delete(OLDTLDRSECRETKEY);
+			}
 
 			if (this.pinManager) {
 				await this.pinManager.updatePinnedPath(OLDFULLPATH, NEWFULLPATH);
@@ -738,6 +1545,12 @@ export class SecretMemoryStorage implements IMemoryStorage {
 				continue; // Skip root directory
 			}
 
+			let tldr: string | undefined;
+			if (!DATA.isDirectory) {
+				const TLDRSECRETKEY = this.getTldrSecretKey(PATH);
+				tldr = await this.secretStorage.get(TLDRSECRETKEY);
+			}
+
 			const INFO: IMemoryFileInfo = {
 				path: PATH,
 				name: path.posix.basename(PATH),
@@ -745,12 +1558,28 @@ export class SecretMemoryStorage implements IMemoryStorage {
 				size: DATA.size,
 				lastAccessed: DATA.accessed,
 				lastModified: DATA.modified,
-				isPinned: this.pinManager ? await this.pinManager.isPinned(PATH) : false
+				isPinned: this.pinManager ? await this.pinManager.isPinned(PATH) : false,
+				tldr
 			};
 			FILES.push(INFO);
 		}
 
 		return FILES.sort((A, B) => A.path.localeCompare(B.path));
+	}
+
+	async getTldr(memoryPath: string): Promise<string | undefined> {
+		const TLDRSECRETKEY = this.getTldrSecretKey(memoryPath);
+		return await this.secretStorage.get(TLDRSECRETKEY);
+	}
+
+	async setTldr(memoryPath: string, tldr: string): Promise<void> {
+		const TLDRSECRETKEY = this.getTldrSecretKey(memoryPath);
+		await this.secretStorage.store(TLDRSECRETKEY, tldr);
+	}
+
+	async deleteTldr(memoryPath: string): Promise<void> {
+		const TLDRSECRETKEY = this.getTldrSecretKey(memoryPath);
+		await this.secretStorage.delete(TLDRSECRETKEY);
 	}
 }
 
@@ -793,6 +1622,11 @@ export class DiskMemoryStorage implements IMemoryStorage {
 		return vscode.Uri.joinPath(this.workspaceUri, relativePath);
 	}
 
+	private getTldrUri(memoryPath: string): vscode.Uri {
+		const uri = this.getUri(memoryPath);
+		return vscode.Uri.parse(uri.toString() + '.tldr');
+	}
+
 	async view(memoryPath: string, viewRange?: [number, number]): Promise<string> {
 		const uri = this.getUri(memoryPath);
 
@@ -802,11 +1636,34 @@ export class DiskMemoryStorage implements IMemoryStorage {
 			if (stat.type === vscode.FileType.Directory) {
 				// List directory contents
 				const entries = await this.fs.readDirectory(uri);
-				const items = entries
-					.map(([name, type]) =>
-						type === vscode.FileType.Directory ? `${name}/` : name
-					)
-					.sort();
+				const items: string[] = [];
+				for (const [name, type] of entries) {
+					// Skip .tldr files in listing
+					if (name.endsWith('.tldr')) {
+						continue;
+					}
+
+					if (type === vscode.FileType.Directory) {
+						items.push(`${name}/`);
+					} else {
+						// Try to read TL;DR for file
+						try {
+							const fileUri = vscode.Uri.joinPath(uri, name);
+							const tldrUri = vscode.Uri.parse(fileUri.toString() + '.tldr');
+							const tldrContent = await this.fs.readFile(tldrUri);
+							const tldr = Buffer.from(tldrContent).toString('utf8');
+							if (tldr) {
+								items.push(`${name} - ${tldr}`);
+							} else {
+								items.push(name);
+							}
+						} catch {
+							// No TL;DR file exists
+							items.push(name);
+						}
+					}
+				}
+				items.sort();
 				return `Directory: ${memoryPath}\n${items.map(item => `- ${item}`).join('\n')}`;
 			} else {
 				// Read file contents
@@ -919,6 +1776,13 @@ export class DiskMemoryStorage implements IMemoryStorage {
 					}
 				} else {
 					await this.pinManager.removePinnedPath(fullPath);
+					// Also delete TL;DR file if it exists
+					try {
+						const tldrUri = this.getTldrUri(memoryPath);
+						await this.fs.delete(tldrUri);
+					} catch {
+						// TL;DR file might not exist
+					}
 				}
 			}
 
@@ -969,6 +1833,14 @@ export class DiskMemoryStorage implements IMemoryStorage {
 					}
 				} else {
 					await this.pinManager.updatePinnedPath(oldFullPath, newFullPath);
+					// Also rename TL;DR file if it exists
+					try {
+						const oldTldrUri = this.getTldrUri(oldPath);
+						const newTldrUri = this.getTldrUri(newPath);
+						await this.fs.rename(oldTldrUri, newTldrUri, { overwrite: false });
+					} catch {
+						// TL;DR file might not exist
+					}
 				}
 			}
 
@@ -991,7 +1863,25 @@ export class DiskMemoryStorage implements IMemoryStorage {
 				for (const [name, type] of entries) {
 					const fullPath = path.posix.join(dirPath, name);
 					const uri = vscode.Uri.joinPath(dirUri, name);
+
+					// Skip .tldr files
+					if (name.endsWith('.tldr')) {
+						continue;
+					}
+
 					const stat = await this.fs.stat(uri);
+
+					let tldr: string | undefined;
+					if (type !== vscode.FileType.Directory) {
+						// Try to read TL;DR file
+						try {
+							const tldrUri = vscode.Uri.parse(uri.toString() + '.tldr');
+							const tldrContent = await this.fs.readFile(tldrUri);
+							tldr = Buffer.from(tldrContent).toString('utf8');
+						} catch {
+							// TL;DR file doesn't exist
+						}
+					}
 
 					const info: IMemoryFileInfo = {
 						path: fullPath,
@@ -1000,7 +1890,8 @@ export class DiskMemoryStorage implements IMemoryStorage {
 						size: stat.size,
 						lastAccessed: new Date(stat.mtime), // Use mtime as approximation
 						lastModified: new Date(stat.mtime),
-						isPinned: this.pinManager ? await this.pinManager.isPinned(fullPath) : false
+						isPinned: this.pinManager ? await this.pinManager.isPinned(fullPath) : false,
+						tldr
 					};
 
 					files.push(info);
@@ -1016,5 +1907,29 @@ export class DiskMemoryStorage implements IMemoryStorage {
 
 		await processDirectory(this.workspaceUri, MEMORIES_DIR);
 		return files;
+	}
+
+	async getTldr(memoryPath: string): Promise<string | undefined> {
+		try {
+			const tldrUri = this.getTldrUri(memoryPath);
+			const content = await this.fs.readFile(tldrUri);
+			return Buffer.from(content).toString('utf8');
+		} catch {
+			return undefined;
+		}
+	}
+
+	async setTldr(memoryPath: string, tldr: string): Promise<void> {
+		const tldrUri = this.getTldrUri(memoryPath);
+		await this.fs.writeFile(tldrUri, Buffer.from(tldr, 'utf8'));
+	}
+
+	async deleteTldr(memoryPath: string): Promise<void> {
+		try {
+			const tldrUri = this.getTldrUri(memoryPath);
+			await this.fs.delete(tldrUri);
+		} catch {
+			// TL;DR file might not exist
+		}
 	}
 }

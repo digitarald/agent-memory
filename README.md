@@ -19,11 +19,12 @@ All operations are scoped to the `/memories` directory with path traversal prote
 
 ### Storage Backends
 
-Choose between three storage options via settings (`agentMemory.storageBackend`):
+Choose between four storage options via settings (`agentMemory.storageBackend`):
 
-1. **In-Memory (default)**: Ephemeral storage per workspace, cleared when VS Code closes
-2. **Disk**: Persistent storage in `.vscode/memory` directory within your workspace
-3. **Secret**: Encrypted persistent storage using VS Code's Secret Storage API - ideal for sensitive information
+1. **Workspace State (default)**: Persistent storage per workspace using VS Code's workspace state - data persists across VS Code sessions
+2. **Branch State**: Persistent storage per workspace AND git branch - isolates memory by branch for better context separation
+3. **Disk**: Persistent storage in `.vscode/memory` directory within your workspace
+4. **Secret**: Encrypted persistent storage using VS Code's Secret Storage API - ideal for sensitive information
 
 ### Visual Interface
 
@@ -111,7 +112,7 @@ Agent: I'll store that preference in memory.
 
 ### Settings
 
-- `agentMemory.storageBackend`: Choose between `memory` (default), `disk`, or `secret` storage
+- `agentMemory.storageBackend`: Choose between `workspace-state` (default), `branch-state`, `disk`, or `secret` storage
 - `agentMemory.autoSyncToFile`: Relative file path to automatically sync all memory files to (e.g., `AGENTS.md` or `.github/copilot/memory.instructions.md`). Leave empty to disable auto-sync. (default: `""` - disabled)
 
 ## Memory Tool API
