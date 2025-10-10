@@ -29,10 +29,13 @@ export class MockMemoryStorage implements IMemoryStorage {
 	async view(path: string, viewRange?: [number, number]): Promise<string> {
 		validateMemoryPath(path);
 
-		if (this.directories.has(path)) {
+		// Normalize path by removing trailing slash for directory checks
+		const normalizedPath = path.endsWith('/') && path !== '/' ? path.slice(0, -1) : path;
+
+		if (this.directories.has(normalizedPath)) {
 			// List directory contents
 			const contents: string[] = [];
-			const pathPrefix = path === '/memories' ? '/memories/' : `${path}/`;
+			const pathPrefix = normalizedPath === '/memories' ? '/memories/' : `${normalizedPath}/`;
 
 			// Find immediate children
 			for (const filePath of this.files.keys()) {
@@ -45,7 +48,7 @@ export class MockMemoryStorage implements IMemoryStorage {
 			}
 
 			for (const dirPath of this.directories) {
-				if (dirPath !== path && dirPath.startsWith(pathPrefix)) {
+				if (dirPath !== normalizedPath && dirPath.startsWith(pathPrefix)) {
 					const relativePart = dirPath.slice(pathPrefix.length);
 					if (!relativePart.includes('/')) {
 						contents.push(`${relativePart}/`);

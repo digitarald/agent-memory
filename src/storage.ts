@@ -99,11 +99,16 @@ export class WorkspaceStateStorage implements IMemoryStorage {
 
 	private getFullPath(memoryPath: string): string {
 		validateMemoryPath(memoryPath);
-		// Normalize path to always start with /memories
-		if (!memoryPath.startsWith(MEMORIES_DIR)) {
-			return path.posix.join(MEMORIES_DIR, memoryPath);
+		// Normalize path: remove trailing slash (except for root)
+		let normalized = memoryPath;
+		if (normalized.endsWith('/') && normalized !== '/') {
+			normalized = normalized.slice(0, -1);
 		}
-		return memoryPath;
+		// Normalize path to always start with /memories
+		if (!normalized.startsWith(MEMORIES_DIR)) {
+			return path.posix.join(MEMORIES_DIR, normalized);
+		}
+		return normalized;
 	}
 
 	private async ensureParentDirectories(filePath: string): Promise<void> {
@@ -697,11 +702,16 @@ export class BranchStateStorage implements IMemoryStorage {
 
 	private getFullPath(memoryPath: string): string {
 		validateMemoryPath(memoryPath);
-		// Normalize path to always start with /memories
-		if (!memoryPath.startsWith(MEMORIES_DIR)) {
-			return path.posix.join(MEMORIES_DIR, memoryPath);
+		// Normalize path: remove trailing slash (except for root)
+		let normalized = memoryPath;
+		if (normalized.endsWith('/') && normalized !== '/') {
+			normalized = normalized.slice(0, -1);
 		}
-		return memoryPath;
+		// Normalize path to always start with /memories
+		if (!normalized.startsWith(MEMORIES_DIR)) {
+			return path.posix.join(MEMORIES_DIR, normalized);
+		}
+		return normalized;
 	}
 
 	private async ensureParentDirectories(filePath: string): Promise<void> {
@@ -1150,10 +1160,15 @@ export class SecretMemoryStorage implements IMemoryStorage {
 
 	private getFullPath(memoryPath: string): string {
 		validateMemoryPath(memoryPath);
-		if (!memoryPath.startsWith(MEMORIES_DIR)) {
-			return path.posix.join(MEMORIES_DIR, memoryPath);
+		// Normalize path: remove trailing slash (except for root)
+		let normalized = memoryPath;
+		if (normalized.endsWith('/') && normalized !== '/') {
+			normalized = normalized.slice(0, -1);
 		}
-		return memoryPath;
+		if (!normalized.startsWith(MEMORIES_DIR)) {
+			return path.posix.join(MEMORIES_DIR, normalized);
+		}
+		return normalized;
 	}
 
 	private async getMetadata(): Promise<Map<string, { isDirectory: boolean; size: number; modified: Date; accessed: Date }>> {
@@ -1616,9 +1631,21 @@ export class DiskMemoryStorage implements IMemoryStorage {
 
 	private getUri(memoryPath: string): vscode.Uri {
 		validateMemoryPath(memoryPath);
-		const relativePath = memoryPath.startsWith(MEMORIES_DIR)
+		let relativePath = memoryPath.startsWith(MEMORIES_DIR)
 			? memoryPath.slice(MEMORIES_DIR.length)
 			: memoryPath;
+		
+		// Remove leading slash to make it a proper relative path
+		// This handles both "/memories" -> "" and "/memories/" -> "/"
+		if (relativePath.startsWith('/')) {
+			relativePath = relativePath.slice(1);
+		}
+		
+		// If empty (i.e., the root /memories directory), use '.' for current directory
+		if (relativePath === '') {
+			relativePath = '.';
+		}
+		
 		return vscode.Uri.joinPath(this.workspaceUri, relativePath);
 	}
 

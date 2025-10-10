@@ -67,11 +67,30 @@ describe('MockMemoryStorage', () => {
 		expect(content).toContain('- file1.txt');
 		expect(content).toContain('- file2.txt');
 		expect(content).toContain('- folder/');
+	});	it('should list directory contents with trailing slash', async () => {
+		await storage.create('/memories/file1.txt', 'Content 1');
+		await storage.create('/memories/file2.txt', 'Content 2');
+		await storage.create('/memories/folder/file3.txt', 'Content 3');
+
+		// /memories/ should work the same as /memories
+		const content = await storage.view('/memories/');
+		expect(content).toContain('- file1.txt');
+		expect(content).toContain('- file2.txt');
+		expect(content).toContain('- folder/');
 	});	it('should list nested directory contents', async () => {
 		await storage.create('/memories/folder/file1.txt', 'Content 1');
 		await storage.create('/memories/folder/file2.txt', 'Content 2');
 
 		const content = await storage.view('/memories/folder');
+		expect(content).toContain('- file1.txt');
+		expect(content).toContain('- file2.txt');
+	});
+	it('should list nested directory contents with trailing slash', async () => {
+		await storage.create('/memories/folder/file1.txt', 'Content 1');
+		await storage.create('/memories/folder/file2.txt', 'Content 2');
+
+		// /memories/folder/ should work the same as /memories/folder
+		const content = await storage.view('/memories/folder/');
 		expect(content).toContain('- file1.txt');
 		expect(content).toContain('- file2.txt');
 	});
