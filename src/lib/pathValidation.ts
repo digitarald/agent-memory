@@ -56,3 +56,18 @@ export function getRelativePath(memoryPath: string): string {
 export function getMemoriesDir(): string {
 	return MEMORIES_DIR;
 }
+
+/**
+ * Normalizes a memory path by removing trailing slashes
+ * This ensures consistent path handling across all storage backends
+ *
+ * @param memoryPath - The path to normalize
+ * @returns The normalized path without trailing slash (except for root '/')
+ */
+export function normalizeMemoryPath(memoryPath: string): string {
+	// Remove trailing slash (except for root '/')
+	if (memoryPath.endsWith('/') && memoryPath !== '/') {
+		return memoryPath.slice(0, -1);
+	}
+	return memoryPath;
+}
