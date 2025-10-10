@@ -1,4 +1,4 @@
-import { validateMemoryPath, getRelativePath, getMemoriesDir } from '../pathValidation';
+import { validateMemoryPath, getRelativePath, getMemoriesDir, normalizeMemoryPath } from '../pathValidation';
 
 describe('pathValidation', () => {
 	describe('validateMemoryPath', () => {
@@ -70,6 +70,24 @@ describe('pathValidation', () => {
 	describe('getMemoriesDir', () => {
 		it('should return the memories directory constant', () => {
 			expect(getMemoriesDir()).toBe('/memories');
+		});
+	});
+
+	describe('normalizeMemoryPath', () => {
+		it('should remove trailing slash from paths', () => {
+			expect(normalizeMemoryPath('/memories/')).toBe('/memories');
+			expect(normalizeMemoryPath('/memories/folder/')).toBe('/memories/folder');
+			expect(normalizeMemoryPath('/memories/file.txt/')).toBe('/memories/file.txt');
+		});
+
+		it('should not modify paths without trailing slash', () => {
+			expect(normalizeMemoryPath('/memories')).toBe('/memories');
+			expect(normalizeMemoryPath('/memories/folder')).toBe('/memories/folder');
+			expect(normalizeMemoryPath('/memories/file.txt')).toBe('/memories/file.txt');
+		});
+
+		it('should preserve single slash', () => {
+			expect(normalizeMemoryPath('/')).toBe('/');
 		});
 	});
 });

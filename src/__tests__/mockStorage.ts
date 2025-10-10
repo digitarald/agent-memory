@@ -1,5 +1,5 @@
 import { IMemoryStorage, IMemoryFileInfo, IPinManager } from '../types';
-import { validateMemoryPath } from '../lib/pathValidation';
+import { validateMemoryPath, normalizeMemoryPath } from '../lib/pathValidation';
 import { TextUtils } from '../lib/utils';
 
 /**
@@ -30,7 +30,7 @@ export class MockMemoryStorage implements IMemoryStorage {
 		validateMemoryPath(path);
 
 		// Normalize path by removing trailing slash for directory checks
-		const normalizedPath = path.endsWith('/') && path !== '/' ? path.slice(0, -1) : path;
+		const normalizedPath = normalizeMemoryPath(path);
 
 		if (this.directories.has(normalizedPath)) {
 			// List directory contents

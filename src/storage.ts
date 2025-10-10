@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { IMemoryStorage, IMemoryFileInfo, IPinManager } from './types.js';
-import { validateMemoryPath, getMemoriesDir } from './lib/pathValidation.js';
+import { validateMemoryPath, getMemoriesDir, normalizeMemoryPath } from './lib/pathValidation.js';
 import { TextUtils } from './lib/utils.js';
 
 const MEMORIES_DIR = getMemoriesDir();
@@ -100,10 +100,7 @@ export class WorkspaceStateStorage implements IMemoryStorage {
 	private getFullPath(memoryPath: string): string {
 		validateMemoryPath(memoryPath);
 		// Normalize path: remove trailing slash (except for root)
-		let normalized = memoryPath;
-		if (normalized.endsWith('/') && normalized !== '/') {
-			normalized = normalized.slice(0, -1);
-		}
+		const normalized = normalizeMemoryPath(memoryPath);
 		// Normalize path to always start with /memories
 		if (!normalized.startsWith(MEMORIES_DIR)) {
 			return path.posix.join(MEMORIES_DIR, normalized);
@@ -703,10 +700,7 @@ export class BranchStateStorage implements IMemoryStorage {
 	private getFullPath(memoryPath: string): string {
 		validateMemoryPath(memoryPath);
 		// Normalize path: remove trailing slash (except for root)
-		let normalized = memoryPath;
-		if (normalized.endsWith('/') && normalized !== '/') {
-			normalized = normalized.slice(0, -1);
-		}
+		const normalized = normalizeMemoryPath(memoryPath);
 		// Normalize path to always start with /memories
 		if (!normalized.startsWith(MEMORIES_DIR)) {
 			return path.posix.join(MEMORIES_DIR, normalized);
@@ -1161,10 +1155,7 @@ export class SecretMemoryStorage implements IMemoryStorage {
 	private getFullPath(memoryPath: string): string {
 		validateMemoryPath(memoryPath);
 		// Normalize path: remove trailing slash (except for root)
-		let normalized = memoryPath;
-		if (normalized.endsWith('/') && normalized !== '/') {
-			normalized = normalized.slice(0, -1);
-		}
+		const normalized = normalizeMemoryPath(memoryPath);
 		if (!normalized.startsWith(MEMORIES_DIR)) {
 			return path.posix.join(MEMORIES_DIR, normalized);
 		}
